@@ -1,0 +1,5 @@
+src-link packages /build/feeds/packages
+src-link luci /build/feeds/luci
+src-link routing /build/feeds/routing
+src-link telephony /build/feeds/telephony
+src-link awg /build/feeds/awg
