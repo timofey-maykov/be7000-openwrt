@@ -2178,9 +2178,27 @@ a.label:hover { text-decoration: none; }
 .label.warning { background: var(--nb-warning-soft); color: var(--nb-warning); }
 .label.success { background: var(--nb-success-soft); color: var(--nb-success); }
 
-body[data-page="admin-status-overview"] .cbi-title .label { cursor: pointer; }
-body[data-page="admin-status-overview"] .cbi-title .label.notice { opacity: .7; }
-body[data-page="admin-status-overview"] .cbi-title .label.notice:hover { opacity: 1; }
+.cbi-title .label,
+h3 > .label,
+h4 > .label,
+.label[data-clickable],
+.label[onclick],
+[role="button"],
+[data-indicator][data-clickable],
+.cbi-tabmenu > li,
+.tabs > li,
+.ifacebadge[onclick],
+summary {
+	cursor: pointer;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.cbi-title .label:hover,
+h3 > .label:hover { filter: brightness(.96); }
+
+.cbi-title .label.notice { opacity: .7; }
+.cbi-title .label.notice:hover { opacity: 1; }
 
 .cbi-title-ref { color: var(--nb-accent); }
 .cbi-title-ref::after { content: " →"; }
