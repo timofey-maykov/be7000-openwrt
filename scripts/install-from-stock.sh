@@ -41,14 +41,21 @@ done
 echo "stock runs from: $CUR   ->   writing OpenWrt into: $TARGET (/dev/$MTD), next boot slot: $SLOT"
 ubiformat "/dev/$MTD" -y -f "$IMG"
 
+# Point the bootloader at the new slot, but do NOT claim the boot succeeded:
+# flag_boot_success stays 0 and flag_last_success keeps pointing at the stock
+# slot, so the bootloader's own fallback still works if OpenWrt never comes up.
+# OpenWrt confirms the boot itself (see /etc/init.d/be7000-bootconfirm), which
+# is what flips flag_boot_success to 1.
+STOCK_SLOT=$FLAG
 nvram set flag_boot_rootfs=$SLOT
-nvram set flag_last_success=$SLOT
-nvram set flag_boot_success=1
+nvram set flag_last_success=$STOCK_SLOT
+nvram set flag_boot_success=0
 nvram set flag_try_sys1_failed=0
 nvram set flag_try_sys2_failed=0
 nvram set flag_ota_reboot=0
 nvram commit
 sync
-echo "done. flags: boot_rootfs=$(nvram get flag_boot_rootfs) last_success=$(nvram get flag_last_success)"
+echo "done. flags: boot_rootfs=$(nvram get flag_boot_rootfs) last_success=$(nvram get flag_last_success) boot_success=$(nvram get flag_boot_success)"
+echo "if OpenWrt does not come up, power-cycle a few times: the stock slot ($STOCK_SLOT) is still marked as the last good one."
 [ "$2" = reboot ] && reboot
 exit 0
