@@ -1,7 +1,15 @@
 #!/bin/sh
 # Run ON the native OpenWrt. Boots the OTHER slot (where the stock firmware lives) on the next reboot.
 # Usage: sh rollback-to-stock.sh        (then: reboot)
-CUR=$(sed -n 's/.*ubi.mtd=\([^ ]*\).*/\1/p' /proc/cmdline)
+# Matched word by word: newer images add a second ubi.mtd= for the spare
+# overlay partition, and a greedy match would return that one instead.
+CUR=""
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+	ubi.mtd=rootfs)   CUR=rootfs ;;
+	ubi.mtd=rootfs_1) CUR=rootfs_1 ;;
+	esac
+done
 case "$CUR" in rootfs) OTHER=1 ;; rootfs_1) OTHER=0 ;; *) echo "unexpected ubi.mtd=$CUR"; exit 1 ;; esac
 fw_setenv flag_boot_rootfs $OTHER && fw_setenv flag_last_success $OTHER && fw_setenv flag_boot_success 1 \
  && fw_setenv flag_try_sys1_failed 0 && fw_setenv flag_try_sys2_failed 0 && fw_setenv flag_ota_reboot 0 \

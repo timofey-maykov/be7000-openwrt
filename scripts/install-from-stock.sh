@@ -10,7 +10,15 @@ set -e
 IMG=${1:-/tmp/openwrt.ubi}
 [ -s "$IMG" ] || { echo "image $IMG not found"; exit 1; }
 
-CUR=$(sed -n 's/.*ubi.mtd=\([^ ]*\).*/\1/p' /proc/cmdline)
+# Matched word by word: newer images add a second ubi.mtd= for the spare
+# overlay partition, and a greedy match would return that one instead.
+CUR=""
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+	ubi.mtd=rootfs)   CUR=rootfs ;;
+	ubi.mtd=rootfs_1) CUR=rootfs_1 ;;
+	esac
+done
 case "$CUR" in
 	rootfs)   TARGET=rootfs_1; SLOT=1 ;;   # stock runs from slot 0 -> write slot 1
 	rootfs_1) TARGET=rootfs;   SLOT=0 ;;   # stock runs from slot 1 -> write slot 0
