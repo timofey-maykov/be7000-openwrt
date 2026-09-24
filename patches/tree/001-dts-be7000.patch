@@ -1,0 +1,33 @@
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -35,7 +35,7 @@
+ 		 * Create a UBI block device for the stock root volume name and
+ 		 * make the later root= override win.
+ 		 */
+-		bootargs-append = " ubi.block=0,ubi_rootfs root=/dev/ubiblock0_1";
++		bootargs-append = " ubi.block=0,ubi_rootfs root=/dev/ubiblock0_1 cpufreq.default_governor=powersave ubi.mtd=overlay";
+ 	};
+ 
+ 	regulator_fixed_3p3: s3300 {
+@@ -980,3 +980,21 @@
+ &pcs2 {
+ 	status = "disabled";
+ };
++
++/* Stock single-phy 5 GHz RF routing (TLMM6 low / TLMM7 high).
++ * Without this the 5 GHz radio has severely weak reception. */
++&tlmm {
++	wifi-5g-rf-select0-hog {
++		gpio-hog;
++		gpios = <6 GPIO_ACTIVE_HIGH>;
++		output-low;
++		line-name = "wifi-5g-rf-select0";
++	};
++
++	wifi-5g-rf-select1-hog {
++		gpio-hog;
++		gpios = <7 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "wifi-5g-rf-select1";
++	};
++};
