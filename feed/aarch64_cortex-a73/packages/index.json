@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "architecture": "aarch64_cortex-a73",
+  "packages": {
+    "cgi-io": "2025.12.11~658b14bd-r1",
+    "htop": "3.5.1-r1",
+    "iperf3": "3.21-r2",
+    "libcap-ng": "0.8.4-r2",
+    "libiperf3": "3.21-r2",
+    "libqrencode": "4.1.1-r2",
+    "mdio-tools": "1.3.2-r1",
+    "miniupnpd-nftables": "2.3.9-r3",
+    "qrencode": "4.1.1-r2"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "architecture": "aarch64_cortex-a73",
+  "packages": {
+    "amneziawg-tools": "2026.08.12-r1"
+  }
+}

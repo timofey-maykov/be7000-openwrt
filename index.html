@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>BE7000 OpenWrt package feed</title>
+<h1>BE7000 OpenWrt package feed</h1>
+<p>Packages built for <code>aarch64_cortex-a73</code>, the CPU type this firmware uses. The official OpenWrt mirror only carries <code>aarch64_cortex-a53</code> for this target, so its generic feeds do not resolve here.</p>
+<p>Add to <code>/etc/apk/repositories.d/customfeeds.list</code>:</p>
+<pre>https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/base/packages.adb
+https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/packages/packages.adb
+https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/luci/packages.adb
+https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/awg/packages.adb</pre>
+<p>The indexes are signed with the same key the firmware trusts, so no extra setup is needed.</p>
