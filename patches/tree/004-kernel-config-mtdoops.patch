@@ -1,0 +1,7 @@
+--- a/target/linux/qualcommbe/ipq95xx/config-default
++++ b/target/linux/qualcommbe/ipq95xx/config-default
+@@ -55,3 +55,4 @@
+ # CONFIG_SPMI_HISI3670 is not set
+ CONFIG_SPMI_MSM_PMIC_ARB=y
+ # CONFIG_SPMI_PMIC_CLKDIV is not set
++CONFIG_MTD_OOPS=y

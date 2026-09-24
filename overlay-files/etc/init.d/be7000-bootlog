@@ -1,0 +1,18 @@
+#!/bin/sh /etc/rc.common
+# Second and final copy of the boot log into crash_syslog, taken when the
+# system is up. See /lib/preinit/02_be7000_bootlog for why and how to read it.
+START=98
+
+start() {
+	local part
+	part=$(grep '"crash_syslog"' /proc/mtd | cut -d: -f1)
+	[ -n "$part" ] || return 0
+	{
+		echo "=== be7000 bootlog: boot done $(cut -d' ' -f1 /proc/uptime)s ==="
+		cat /proc/cmdline
+		dmesg
+		echo "=== ip link ==="
+		ip -br link 2>/dev/null
+	} > /tmp/be7000-bootlog.txt 2>&1
+	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
+}
