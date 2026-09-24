@@ -90,6 +90,12 @@ boot() {
 	ubiformat "/dev/mtd$mtdnum" -y -q || { logger -t bigoverlay "ubiformat failed"; return 0; }
 	ubiattach -m "$mtdnum" >/dev/null 2>&1 || { logger -t bigoverlay "ubiattach failed"; return 0; }
 	ubimkvol /dev/ubi1 -N "$VOLNAME" -m >/dev/null 2>&1 || { logger -t bigoverlay "ubimkvol failed"; return 0; }
+	# Stock keeps its settings on this partition. When it boots again it only
+	# repopulates /data/etc from the ROM if this flag is set; otherwise it sees
+	# a formatted UBI, drops our volume, creates an empty "data" and binds an
+	# empty /data/etc/config over /etc/config. That leaves stock with no uci
+	# config at all, dropbear included. The bootloader ignores the flag.
+	fw_setenv flag_format_overlay 1 2>/dev/null || logger -t bigoverlay "could not set flag_format_overlay"
 
 	dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
 	migrate "$dev" || return 0
