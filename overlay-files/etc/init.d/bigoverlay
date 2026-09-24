@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+# Prepare the spare "overlay" partition so /overlay can live there.
+#
+# The kernel attaches it as ubi1 (ubi.mtd=overlay on the command line). If it
+# does not carry a prepared volume yet, create one, copy the current overlay
+# across and reboot so that fstools mounts it during preinit. See
+# /etc/config/bigoverlay to opt out.
+START=11
+
+STATE=/etc/bigoverlay.failed
+VOLNAME=overlay_data
+# Written into the volume once the settings have been copied in. An existing
+# volume is NOT enough to call it done: an empty one mounted as /overlay comes
+# up with factory defaults and looks like the router lost its configuration.
+STAMP=.bigoverlay_migrated
+
+volume_dev() {
+	local n
+	for n in /sys/class/ubi/ubi1_*/name; do
+		[ -e "$n" ] || continue
+		[ "$(cat "$n")" = "$VOLNAME" ] || continue
+		echo "/dev/$(basename "$(dirname "$n")")"
+		return 0
+	done
+	return 1
+}
+
+migrated() {
+	local dev="$1" rc=1
+	mkdir -p /tmp/bigoverlay.check
+	mount -t ubifs "$dev" /tmp/bigoverlay.check 2>/dev/null || return 1
+	[ -f "/tmp/bigoverlay.check/$STAMP" ] && rc=0
+	umount /tmp/bigoverlay.check
+	rmdir /tmp/bigoverlay.check 2>/dev/null
+	return $rc
+}
+
+migrate() {
+	local dev="$1"
+	mkdir -p /tmp/bigoverlay
+	mount -t ubifs "$dev" /tmp/bigoverlay || { logger -t bigoverlay "mount failed"; return 1; }
+	cp -a /overlay/upper /tmp/bigoverlay/ 2>/dev/null
+	mkdir -p /tmp/bigoverlay/work
+	: > "/tmp/bigoverlay/$STAMP"
+	sync
+	umount /tmp/bigoverlay
+	return 0
+}
+
+boot() {
+	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
+	[ -d /sys/class/ubi/ubi1 ] || {
+		logger -t bigoverlay "spare overlay partition not attached, nothing to do"
+		return 0
+	}
+	# Already serving as /overlay: nothing left to do.
+	case "$(mount | grep ' on /overlay ')" in
+	/dev/ubi1_*) return 0 ;;
+	esac
+	[ -f "$STATE" ] && {
+		logger -t bigoverlay "previous attempt failed, not retrying"
+		return 0
+	}
+
+	local dev
+	dev="$(volume_dev)"
+
+	if [ -n "$dev" ]; then
+		migrated "$dev" && return 0
+		logger -t bigoverlay "volume exists but holds no settings yet, copying them in"
+		: > "$STATE"
+		migrate "$dev" || return 0
+		rm -f "$STATE"
+		logger -t bigoverlay "settings copied, rebooting to switch /overlay over"
+		sync
+		reboot
+		return 0
+	fi
+
+	local mtdnum
+	mtdnum="$(grep '"overlay"' /proc/mtd | cut -d: -f1 | tr -dc '0-9')"
+	[ -n "$mtdnum" ] || {
+		logger -t bigoverlay "no overlay partition in /proc/mtd"
+		return 0
+	}
+
+	: > "$STATE"
+	logger -t bigoverlay "preparing mtd$mtdnum, this erases the stock settings stored there"
+	ubidetach -m "$mtdnum" >/dev/null 2>&1
+	ubiformat "/dev/mtd$mtdnum" -y -q || { logger -t bigoverlay "ubiformat failed"; return 0; }
+	ubiattach -m "$mtdnum" >/dev/null 2>&1 || { logger -t bigoverlay "ubiattach failed"; return 0; }
+	ubimkvol /dev/ubi1 -N "$VOLNAME" -m >/dev/null 2>&1 || { logger -t bigoverlay "ubimkvol failed"; return 0; }
+
+	dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
+	migrate "$dev" || return 0
+	rm -f "$STATE"
+	logger -t bigoverlay "prepared, rebooting to switch /overlay over"
+	sync
+	reboot
+}
