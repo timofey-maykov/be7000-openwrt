@@ -60,6 +60,37 @@ cmd_list() {
 	[ "$found" = 1 ] || echo "no usable disks found; plug one into the USB port and try again"
 }
 
+# Same survey as cmd_list, as JSON, for the LuCI page.
+cmd_list_json() {
+	local first=1 d name size model mounted
+	printf '['
+	for d in /dev/sd[a-z] /dev/sd[a-z][0-9]* /dev/mmcblk[0-9]p[0-9]*; do
+		[ -b "$d" ] || continue
+		name="$(basename "$d")"
+		size="$(awk -v n="$name" '$4 == n { printf "%.0f", $3/1024 }' /proc/partitions)"
+		model=""
+		[ -r "/sys/class/block/$name/device/model" ] && model="$(tr -d '\r' < "/sys/class/block/$name/device/model" | sed 's/[[:space:]]*$//' | sed 's/"/\\"/g')"
+		mounted=false
+		mount | grep -q "^$d " && mounted=true
+		[ $first = 1 ] || printf ','
+		first=0
+		printf '{"device":"%s","size_mb":%s,"model":"%s","mounted":%s}' "$d" "${size:-0}" "$model" "$mounted"
+	done
+	printf ']\n'
+}
+
+cmd_status_json() {
+	local dev total avail uuid enabled
+	dev="$(current_overlay_device)"
+	set -- $(df -k /overlay | tail -1)
+	total="$2"; avail="$4"
+	uuid="$(uci -q get fstab.extroot.uuid)"
+	enabled="$(uci -q get fstab.extroot.enabled)"
+	[ -n "$enabled" ] || enabled=""
+	printf '{"device":"%s","total_kb":%s,"available_kb":%s,"extroot_uuid":"%s","extroot_enabled":"%s"}\n' \
+		"${dev:-}" "${total:-0}" "${avail:-0}" "$uuid" "$enabled"
+}
+
 cmd_use() {
 	local dev="$1" yes="$2" do_reboot="$3" uuid
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
@@ -139,13 +170,17 @@ for a in "$@"; do
 	case "$a" in
 	--yes) YES=1 ;;
 	--reboot) REBOOT=1 ;;
+	--json) ;;
 	*) DEV="$a" ;;
 	esac
 done
 
+JSON=0
+for a in "$@"; do [ "$a" = "--json" ] && JSON=1; done
+
 case "$ACTION" in
-status) cmd_status ;;
-list)   cmd_list ;;
+status) [ $JSON = 1 ] && cmd_status_json || cmd_status ;;
+list)   [ $JSON = 1 ] && cmd_list_json || cmd_list ;;
 use)    cmd_use "$DEV" "$YES" "$REBOOT" ;;
 revert) cmd_revert "$YES" "$REBOOT" ;;
 *)
