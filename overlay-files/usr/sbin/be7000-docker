@@ -1,0 +1,149 @@
+#!/bin/sh
+# Set up Docker on this router.
+#
+# The part that bites people here is where the images go. dockerd defaults its
+# data-root to /opt/docker, which lives on the overlay: about 19 MB on this
+# board, or 7 MB if the spare partition was left to the stock firmware. One
+# image fills it. So this picks a real disk and points dockerd at it.
+#
+# Usage:
+#   be7000-docker status
+#   be7000-docker setup [--data-root /mnt/sda1/docker] [--yes]
+#   be7000-docker portainer [--yes]
+
+set -e
+
+PKGS="dockerd docker docker-compose luci-app-dockerman"
+MIN_FREE_MB=1024
+
+die() { echo "$*" >&2; exit 1; }
+
+data_root_now() {
+	uci -q get dockerd.globals.data_root || echo "/opt/docker/"
+}
+
+free_mb_of() {
+	local path="$1"
+	while [ ! -d "$path" ] && [ "$path" != "/" ]; do path="$(dirname "$path")"; done
+	df -m "$path" 2>/dev/null | awk 'NR==2 { print $4 }'
+}
+
+installed() {
+	command -v dockerd >/dev/null 2>&1
+}
+
+# A mounted disk that is not the root filesystem and has room.
+suggest_data_root() {
+	local dev mp free
+	mount | while read -r dev _ mp _; do
+		case "$dev" in /dev/sd*|/dev/mmcblk*) ;; *) continue ;; esac
+		case "$mp" in /|/rom|/overlay|/tmp) continue ;; esac
+		free="$(free_mb_of "$mp")"
+		[ -n "$free" ] && [ "$free" -ge "$MIN_FREE_MB" ] && { echo "$mp/docker"; return 0; }
+	done
+	return 1
+}
+
+cmd_status() {
+	if installed; then
+		echo "dockerd: установлен, $(dockerd --version 2>/dev/null | head -1)"
+	else
+		echo "dockerd: не установлен"
+	fi
+	local dr free
+	dr="$(data_root_now)"
+	free="$(free_mb_of "$dr")"
+	echo "данные: $dr"
+	echo "свободно там: ${free:-?} МБ"
+	if [ -n "$free" ] && [ "$free" -lt "$MIN_FREE_MB" ]; then
+		echo
+		echo "Этого мало. Образы докера считаются сотнями мегабайт."
+		echo "Подключите диск и запустите: be7000-docker setup"
+	fi
+	echo
+	echo "служба: $(/etc/init.d/dockerd status 2>/dev/null || echo 'не запущена')"
+}
+
+cmd_setup() {
+	local want="$1" yes="$2" dr free
+
+	if [ -n "$want" ]; then
+		dr="$want"
+	else
+		dr="$(suggest_data_root)" || die "Не нашёл подключённого диска со свободным местом от ${MIN_FREE_MB} МБ.
+Подключите диск, смонтируйте его и укажите путь: be7000-docker setup --data-root /mnt/sda1/docker"
+	fi
+
+	free="$(free_mb_of "$dr")"
+	[ -n "$free" ] || die "Не удалось определить свободное место для $dr"
+	if [ "$free" -lt "$MIN_FREE_MB" ]; then
+		echo "Свободно всего ${free} МБ, это мало для докера." >&2
+		[ "$yes" = 1 ] || die "Если уверены, повторите с --yes"
+	fi
+
+	if [ "$yes" != 1 ]; then
+		echo "Поставлю: $PKGS"
+		echo "Данные докера будут лежать в: $dr (свободно ${free} МБ)"
+		echo "Повторите с --yes, чтобы выполнить."
+		exit 1
+	fi
+
+	if ! installed; then
+		echo "Ставлю пакеты"
+		apk update >/dev/null 2>&1 || true
+		# shellcheck disable=SC2086
+		apk add $PKGS || die "Не удалось поставить пакеты. Проверьте apk update."
+	fi
+
+	mkdir -p "$dr"
+	echo "Прописываю data-root"
+	uci -q set dockerd.globals.data_root="$dr"
+	uci -q commit dockerd
+
+	/etc/init.d/dockerd enable >/dev/null 2>&1 || true
+	/etc/init.d/dockerd restart
+
+	echo
+	echo "Готово. Управление в LuCI: Сервисы, Dockerman."
+	echo "Там контейнеры, образы, сети, тома, логи и консоль внутрь контейнера."
+}
+
+cmd_portainer() {
+	local yes="$1"
+	installed || die "Сначала be7000-docker setup"
+	if [ "$yes" != 1 ]; then
+		echo "Запущу Portainer CE контейнером, веб-интерфейс на порту 9443 по https."
+		echo "Это отдельный интерфейс поверх докера, со стеками и compose."
+		echo "Повторите с --yes."
+		exit 1
+	fi
+	docker volume create portainer_data >/dev/null
+	docker run -d --name portainer --restart=always \
+		-p 9443:9443 \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v portainer_data:/data \
+		portainer/portainer-ce:latest
+	echo "Portainer поднят. Откройте https://<адрес роутера>:9443 и задайте пароль."
+}
+
+ACTION="$1"
+[ $# -gt 0 ] && shift
+YES=0; DR=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--yes) YES=1 ;;
+	--data-root) shift; DR="$1" ;;
+	*) ;;
+	esac
+	shift
+done
+
+case "$ACTION" in
+status)    cmd_status ;;
+setup)     cmd_setup "$DR" "$YES" ;;
+portainer) cmd_portainer "$YES" ;;
+*)
+	echo "usage: be7000-docker {status|setup [--data-root PATH] [--yes]|portainer [--yes]}"
+	exit 1
+	;;
+esac

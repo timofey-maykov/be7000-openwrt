@@ -22,6 +22,21 @@ current_overlay_device() {
 	mount | awk '$3 == "/overlay" { print $1; exit }'
 }
 
+
+# A partition whose whole disk is in use is not safe to touch: after the disk
+# was re-partitioned the kernel can still expose stale partition nodes that now
+# overlap a live filesystem, and formatting one of those eats the disk.
+parent_busy() {
+	local dev="$1" parent
+	case "$dev" in
+	/dev/sd[a-z][0-9]*) parent="$(echo "$dev" | sed 's/[0-9]*$//')" ;;
+	/dev/mmcblk[0-9]p[0-9]*) parent="$(echo "$dev" | sed 's/p[0-9]*$//')" ;;
+	*) return 1 ;;
+	esac
+	mount | grep -q "^$parent " && return 0
+	return 1
+}
+
 cmd_status() {
 	local dev
 	dev="$(current_overlay_device)"
@@ -52,6 +67,8 @@ cmd_list() {
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(cat "/sys/class/block/$name/device/model")"
 		if mount | grep -q "^$d "; then
 			echo "$d  ${size:-?}  $model  (mounted, skipped)"
+		elif parent_busy "$d"; then
+			echo "$d  ${size:-?}  $model  (whole disk in use, skipped)"
 		else
 			echo "$d  ${size:-?}  $model"
 			found=1
@@ -72,6 +89,7 @@ cmd_list_json() {
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(tr -d '\r' < "/sys/class/block/$name/device/model" | sed 's/[[:space:]]*$//' | sed 's/"/\\"/g')"
 		mounted=false
 		mount | grep -q "^$d " && mounted=true
+		parent_busy "$d" && mounted=true
 		[ $first = 1 ] || printf ','
 		first=0
 		printf '{"device":"%s","size_mb":%s,"model":"%s","mounted":%s}' "$d" "${size:-0}" "$model" "$mounted"
@@ -96,6 +114,7 @@ cmd_use() {
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
 	[ -b "$dev" ] || die "$dev is not a block device"
 	mount | grep -q "^$dev " && die "$dev is mounted, unmount it first"
+	parent_busy "$dev" && die "the whole disk this partition sits on is mounted, so this node may be stale; unmount it first"
 	case "$dev" in
 	/dev/ubi*|/dev/mtd*) die "$dev is internal flash, not an external disk" ;;
 	esac

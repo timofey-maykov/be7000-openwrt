@@ -1,8 +1,27 @@
 #!/bin/sh /etc/rc.common
 # Radios stay disabled until the user configures Wi-Fi (the port creates an open AP by default).
+#
+# This must fire on a fresh install and never again. The marker alone was not
+# enough: it lives outside the files sysupgrade preserves, so every upgrade
+# looked like a fresh install and switched both radios off on a router that
+# was already set up.
+#
+# A restored /etc/config/wireless is the reliable sign of an upgrade. On a
+# fresh install the file does not exist yet at this point, it gets generated
+# later during boot, which is what the wait loop below is for.
 START=99
+
+MARK=/etc/.be7000_secure_defaults
+
 boot() {
-	[ -e /etc/.be7000_secure_defaults ] && return 0
+	[ -e "$MARK" ] && return 0
+
+	if [ -s /etc/config/wireless ]; then
+		# Came back from a backup, so the router was configured before.
+		touch "$MARK"
+		return 0
+	fi
+
 	(
 		i=0
 		while [ $i -lt 120 ]; do
@@ -15,7 +34,7 @@ boot() {
 			uci -q set wireless.default_radio$r.disabled=1
 		done
 		uci commit wireless
-		touch /etc/.be7000_secure_defaults
+		touch "$MARK"
 		wifi reload
 	) &
 }
