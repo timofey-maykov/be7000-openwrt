@@ -1,11 +1,12 @@
 #!/bin/sh /etc/rc.common
 # Tell the bootloader that this slot actually came up.
 #
-# The installer points the bootloader at the new slot but leaves
-# flag_boot_success at 0 and flag_last_success on the stock slot, so that a
-# system which never reaches userspace still falls back on its own. Confirming
-# that here, as late as possible in the boot, is what closes that loop: if we
-# get this far, the slot works.
+# The stock U-Boot bumps flag_try_sys{N}_failed on every single boot and
+# switches slots once it passes 5; only the running system can zero it. Stock
+# does that in its own init, so a native image has to do the same or it walks
+# itself back to the stock slot after seven boots. On the first boot after the
+# installer (flag_ota_reboot=1) this is also what turns the one-shot try into
+# the permanent choice: last_success moves to this slot and ota_reboot drops.
 #
 # Writing only on change keeps the environment partition from being rewritten
 # on every single boot.
@@ -47,6 +48,7 @@ start() {
 	}
 	set_if_changed flag_last_success "$slot"
 	set_if_changed flag_boot_success 1
+	set_if_changed flag_ota_reboot 0
 	set_if_changed flag_try_sys1_failed 0
 	set_if_changed flag_try_sys2_failed 0
 }
