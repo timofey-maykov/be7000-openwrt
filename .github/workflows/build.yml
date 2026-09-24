@@ -230,10 +230,13 @@ jobs:
           else
             args=(--generate-notes)
           fi
-          gh release create "${{ github.ref_name }}" --latest \
-            --title "BE7000 native OpenWrt v$VER" "${args[@]}" \
-            "be7000-openwrt-v$VER.zip" \
-            "$DEVICE-squashfs-factory.ubi" \
-            "$DEVICE-squashfs-sysupgrade.bin" \
-            "$DEVICE.manifest" \
-            sha256sums.txt
+          assets=("be7000-openwrt-v$VER.zip" "$DEVICE-squashfs-factory.ubi" \
+                  "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt)
+          # A release for this tag may already exist (created by hand, or a
+          # rerun): then just replace its files rather than fail at the end.
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release upload "${{ github.ref_name }}" --clobber "${assets[@]}"
+          else
+            gh release create "${{ github.ref_name }}" --latest \
+              --title "BE7000 native OpenWrt v$VER" "${args[@]}" "${assets[@]}"
+          fi
