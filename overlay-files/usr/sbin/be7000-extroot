@@ -1,0 +1,155 @@
+#!/bin/sh
+# Move /overlay onto an external disk (extroot).
+#
+# Everything the router keeps between reboots lives in /overlay: installed
+# packages, settings, lists. On this board the built-in space for it is small,
+# so a USB disk is the way to get room.
+#
+# Usage:
+#   be7000-extroot status
+#   be7000-extroot list
+#   be7000-extroot use <device> [--yes] [--reboot]
+#   be7000-extroot revert [--yes] [--reboot]
+
+set -e
+
+LABEL=be7000_overlay
+MNT=/tmp/extroot.$$
+
+die() { echo "$*" >&2; exit 1; }
+
+current_overlay_device() {
+	mount | awk '$3 == "/overlay" { print $1; exit }'
+}
+
+cmd_status() {
+	local dev
+	dev="$(current_overlay_device)"
+	echo "/overlay is on: ${dev:-unknown}"
+	df -h /overlay | tail -1
+	echo
+	echo "configured in fstab:"
+	if uci -q get fstab.extroot >/dev/null; then
+		local where
+		where="$(uci -q get fstab.extroot.device)"
+		[ -n "$where" ] || where="UUID $(uci -q get fstab.extroot.uuid)"
+		echo "  $where"
+		echo "  enabled $(uci -q get fstab.extroot.enabled)"
+	else
+		echo "  no extroot entry"
+	fi
+}
+
+# A candidate is a whole disk or partition that is not currently mounted and is
+# not where the running system lives.
+cmd_list() {
+	local found=0 d name size model
+	for d in /dev/sd[a-z] /dev/sd[a-z][0-9]* /dev/mmcblk[0-9]p[0-9]*; do
+		[ -b "$d" ] || continue
+		name="$(basename "$d")"
+		size="$(awk -v n="$name" '$4 == n { printf "%.1f GB", $3/1024/1024 }' /proc/partitions)"
+		model=""
+		[ -r "/sys/class/block/$name/device/model" ] && model="$(cat "/sys/class/block/$name/device/model")"
+		if mount | grep -q "^$d "; then
+			echo "$d  ${size:-?}  $model  (mounted, skipped)"
+		else
+			echo "$d  ${size:-?}  $model"
+			found=1
+		fi
+	done
+	[ "$found" = 1 ] || echo "no usable disks found; plug one into the USB port and try again"
+}
+
+cmd_use() {
+	local dev="$1" yes="$2" do_reboot="$3" uuid
+	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
+	[ -b "$dev" ] || die "$dev is not a block device"
+	mount | grep -q "^$dev " && die "$dev is mounted, unmount it first"
+	case "$dev" in
+	/dev/ubi*|/dev/mtd*) die "$dev is internal flash, not an external disk" ;;
+	esac
+	[ "$dev" = "$(current_overlay_device)" ] && die "$dev already carries /overlay"
+
+	if [ "$yes" != 1 ]; then
+		echo "This erases everything on $dev and moves /overlay onto it."
+		echo "Re-run with --yes to go ahead."
+		exit 1
+	fi
+
+	command -v mkfs.ext4 >/dev/null || die "mkfs.ext4 is missing"
+
+	echo "Formatting $dev"
+	mkfs.ext4 -q -F -L "$LABEL" "$dev"
+
+	mkdir -p "$MNT"
+	mount "$dev" "$MNT" || die "cannot mount $dev"
+
+	echo "Copying the current overlay across"
+	# /overlay holds upper/ and work/; copy the contents, not the mount point.
+	cp -a /overlay/. "$MNT"/ 2>/dev/null || true
+	mkdir -p "$MNT/upper" "$MNT/work"
+	sync
+	umount "$MNT"
+	rmdir "$MNT"
+
+	uuid="$(block info "$dev" 2>/dev/null | sed -n 's/.*UUID="\([^"]*\)".*/\1/p')"
+	[ -n "$uuid" ] || die "cannot read the UUID of $dev"
+
+	echo "Pointing /overlay at $dev (UUID $uuid)"
+	uci -q batch <<-EOT
+		set fstab.extroot=mount
+		set fstab.extroot.target='/overlay'
+		set fstab.extroot.uuid='$uuid'
+		set fstab.extroot.fstype='ext4'
+		set fstab.extroot.options='rw,noatime'
+		set fstab.extroot.enabled='1'
+		commit fstab
+	EOT
+	# The built-in spare partition, if it was in use, must not win over the disk.
+	uci -q get fstab.bigoverlay >/dev/null && {
+		uci -q set fstab.bigoverlay.enabled='0'
+		uci -q commit fstab
+	}
+	uci -q set bigoverlay.main.enabled='0' 2>/dev/null && uci -q commit bigoverlay
+
+	echo "Done. The change takes effect on the next boot."
+	[ "$do_reboot" = 1 ] && { sync; reboot; }
+}
+
+cmd_revert() {
+	local yes="$1" do_reboot="$2"
+	uci -q get fstab.extroot >/dev/null || die "no extroot entry to remove"
+	if [ "$yes" != 1 ]; then
+		echo "This returns /overlay to internal flash. Anything stored on the disk stays there but stops being used."
+		echo "Re-run with --yes to go ahead."
+		exit 1
+	fi
+	uci -q delete fstab.extroot
+	uci -q commit fstab
+	echo "Removed. The change takes effect on the next boot."
+	[ "$do_reboot" = 1 ] && { sync; reboot; }
+}
+
+YES=0
+REBOOT=0
+ACTION="$1"
+[ $# -gt 0 ] && shift
+DEV=""
+for a in "$@"; do
+	case "$a" in
+	--yes) YES=1 ;;
+	--reboot) REBOOT=1 ;;
+	*) DEV="$a" ;;
+	esac
+done
+
+case "$ACTION" in
+status) cmd_status ;;
+list)   cmd_list ;;
+use)    cmd_use "$DEV" "$YES" "$REBOOT" ;;
+revert) cmd_revert "$YES" "$REBOOT" ;;
+*)
+	echo "usage: be7000-extroot {status|list|use <device> [--yes] [--reboot]|revert [--yes] [--reboot]}"
+	exit 1
+	;;
+esac
