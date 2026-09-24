@@ -1,4 +1,4 @@
-BE7000, нативный OpenWrt (ядро 6.18), версия 1.2.2, как прошить
+BE7000, нативный OpenWrt (ядро 6.18), версия 1.2.3, как прошить
 
 Что в архиве
 openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi это сам образ.
