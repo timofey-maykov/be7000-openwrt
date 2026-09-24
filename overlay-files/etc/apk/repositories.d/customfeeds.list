@@ -7,3 +7,8 @@ https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/base/pac
 https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/packages/packages.adb
 https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/luci/packages.adb
 https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/awg/packages.adb
+
+# Kernel modules built against the kernel this firmware ships. The mirror's
+# own target feed is built against a newer kernel and cannot satisfy the
+# dependency, so the modules have to come from here.
+https://timofey-maykov.github.io/be7000-openwrt/feed/targets/qualcommbe/ipq95xx/packages/packages.adb
