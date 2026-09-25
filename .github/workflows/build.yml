@@ -25,7 +25,7 @@ name: Build
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
+    tags: ["v*", "debug-*"]
 
 env:
   OWRT_REPO: https://github.com/kravasuper/openwrt.git
@@ -86,6 +86,10 @@ jobs:
           done
           mkdir -p files
           cp -a ../repo/overlay-files/. files/
+          # a debug-* tag ships extra diagnostics and experiments on top
+          case "${{ github.ref_name }}" in
+            debug-*) cp -a ../repo/overlay-files-debug/. files/; echo "debug overlay added" ;;
+          esac
           cp -a ../repo/awg-feed .
           # the LuCI theme lives in this repo, not in any feed
           cp -a ../repo/luci-theme-nimbus package/
@@ -131,6 +135,9 @@ jobs:
           echo "CONFIG_SIGNATURE_CHECK=y" >> .config
           # compiler cache between runs, see the ccache step below
           echo "CONFIG_CCACHE=y" >> .config
+          case "${{ github.ref_name }}" in
+            debug-*) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
+          esac
           make defconfig
           echo "packages as modules: $(grep -c '=m$' .config)"
 
@@ -183,7 +190,7 @@ jobs:
           grep "feed/targets" "$f"
           # what be7000-update and the LuCI page report as the installed version
           TAG="${{ github.ref_name }}"
-          case "$TAG" in v*) VER="${TAG#v}"; VER="${VER%%-*}" ;; *) VER=dev ;; esac
+          case "$TAG" in v*) VER="${TAG#v}"; VER="${VER%%-*}" ;; debug-*) VER="$TAG" ;; *) VER=dev ;; esac
           {
             echo "VERSION=$VER"
             echo "TAG=$TAG"
@@ -210,9 +217,14 @@ jobs:
           # a stray personal file or a debug service would ship to everyone
           ! grep -rlE "hfdbg|HFDBG|192\.168\.11\." build_dir/target-*/root-qualcommbe/etc || {
             echo "personal or debug files in the rootfs" >&2; exit 1; }
+          case "${{ github.ref_name }}" in
+            debug-*) test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug-1g ;;
+            *) ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug-1g ;;
+          esac
           test -L build_dir/target-*/root-qualcommbe/etc/rc.d/S99be7000-bootconfirm
 
       - name: Publish the feed
+        if: "!startsWith(github.ref, 'refs/tags/debug-')"
         run: |
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
@@ -238,10 +250,13 @@ jobs:
           fi
 
       - name: Package the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/debug-')
         run: |
           TAG="${{ github.ref_name }}"
-          VER="${TAG#v}"; VER="${VER%%-*}"
+          case "$TAG" in
+            debug-*) VER="$TAG"; ZIP="be7000-openwrt-$TAG.zip" ;;
+            *) VER="${TAG#v}"; VER="${VER%%-*}"; ZIP="be7000-openwrt-v$VER.zip" ;;
+          esac
           mkdir -p out/zip
           cd out
           cp "../owrt/bin/targets/$TARGET/$DEVICE-squashfs-factory.ubi" .
@@ -252,30 +267,35 @@ jobs:
              ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction.txt sha256sums.txt zip/
           # the instruction's first line carries the version
           sed -i "1s/версия [0-9][0-9.]*/версия $VER/" zip/instruction.txt
-          (cd zip && zip -q -X "../be7000-openwrt-v$VER.zip" ./*)
-          sha256sum "be7000-openwrt-v$VER.zip"
+          (cd zip && zip -q -X "../$ZIP" ./*)
+          sha256sum "$ZIP"
           echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/debug-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd out
           notes=../repo/docs/release-notes/${{ github.ref_name }}.md
           if [ -f "$notes" ]; then
-            printf '\n\nSHA-256 of be7000-openwrt-v%s.zip\n%s\n' "$VER" "$(sha256sum "be7000-openwrt-v$VER.zip" | cut -d' ' -f1)" >> "$notes"
+            printf '\n\nSHA-256 of %s\n%s\n' "$ZIP" "$(sha256sum "$ZIP" | cut -d' ' -f1)" >> "$notes"
             args=(--notes-file "$notes")
           else
             args=(--generate-notes)
           fi
-          assets=("be7000-openwrt-v$VER.zip" "$DEVICE-squashfs-factory.ubi" \
+          assets=("$ZIP" "$DEVICE-squashfs-factory.ubi" \
                   "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt)
           # A release for this tag may already exist (created by hand, or a
           # rerun): then just replace its files rather than fail at the end.
           if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
             gh release upload "${{ github.ref_name }}" -R "${{ github.repository }}" --clobber "${assets[@]}"
           else
-            gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --latest \
-              --title "BE7000 native OpenWrt v$VER" "${args[@]}" "${assets[@]}"
+            case "${{ github.ref_name }}" in
+              debug-*) gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --prerelease \
+                         --title "BE7000 native OpenWrt, отладочная сборка ${{ github.ref_name }}" "${args[@]}" "${assets[@]}" ;;
+              *) gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --latest \
+                   --title "BE7000 native OpenWrt v$VER" "${args[@]}" "${assets[@]}" ;;
+            esac
           fi

@@ -1,32 +1,10 @@
 #!/bin/sh /etc/rc.common
-# Second and final copy of the boot log into crash_syslog, taken when the
-# system is up. See /lib/preinit/02_be7000_bootlog for why and how to read it.
+# Copy of the boot log into crash_syslog taken when the system is up. The
+# periodic copies from /lib/preinit/02_be7000_bootlog keep coming for ten
+# minutes after this one. See /lib/functions/be7000-bootlog.sh for what is in it.
 START=98
 
 start() {
-	grep -q '"crash_syslog"' /proc/mtd || return 0
-	{
-		echo "=== be7000 bootlog: boot done $(cut -d' ' -f1 /proc/uptime)s ==="
-		cat /proc/cmdline
-		dmesg | head -c 45000
-		echo "=== ip addr ==="
-		ip addr 2>&1
-		echo "=== board.json ==="
-		ls -la /etc/board.json 2>&1
-		echo "=== uci network ==="
-		uci -q export network 2>&1
-		echo "=== overlay ==="
-		grep -E ' /overlay | / ' /proc/mounts
-		echo "=== link ==="
-		for i in wan lan1 lan2 lan3; do [ -x /usr/sbin/ethtool ] && ethtool $i 2>/dev/null | grep -E 'Speed|Duplex|Link detected' | tr '\n' ' '; echo " ($i)"; done
-		ip -s link show 2>/dev/null | grep -A5 -E '^[0-9]+: (wan|lan[123]|br-lan):' | grep -E '^[0-9]+:|RX:|TX:| [0-9]+ ' | head -40
-		echo "=== wireless ==="
-		uci -q export wireless 2>&1 | grep -vE 'option key'
-		iw dev 2>&1 | grep -E 'Interface|ssid|channel|type'
-		echo "=== be7000 services ==="
-		logread 2>/dev/null | grep -E 'bigoverlay|romsync|be7000-feeds|wifi-defaults|bootconfirm|AP-ENABLED|AP-DISABLED' | tail -n 25
-		echo "=== logread ==="
-		logread 2>/dev/null | tail -n 80
-	} 2>&1 | head -c 63000 > /tmp/be7000-bootlog.txt
-	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
+	. /lib/functions/be7000-bootlog.sh
+	be7000_bootlog_write "boot done"
 }
