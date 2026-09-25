@@ -12,15 +12,35 @@
 # prints after two minutes. /etc/init.d/be7000-bootlog takes the final copy
 # once boot is done. Kernel panics go to the neighbouring "crash" partition
 # through mtdoops, see the bootargs.
+#
+# The partition is 512 KiB but the reader only needs the first 64 KiB, so
+# the copy is cut there: dmesg first, then the network state. The state part
+# is what tells a board that boots but does not answer on 192.168.1.1 from a
+# board that never booted at all (busybox ip has no -br, plain ip is used).
+
+be7000_bootlog_state() {
+	echo "=== ip addr ==="
+	ip addr 2>&1
+	echo "=== board.json ==="
+	ls -la /etc/board.json 2>&1
+	echo "=== uci network ==="
+	uci -q export network 2>&1
+	echo "=== overlay ==="
+	grep -E ' /overlay | / ' /proc/mounts
+	if [ -x /sbin/logread ]; then
+		echo "=== logread ==="
+		logread 2>/dev/null | tail -n 80
+	fi
+}
 
 be7000_bootlog_write() {
 	grep -q '"crash_syslog"' /proc/mtd || return 0
 	{
 		echo "=== be7000 bootlog: $1 $(cut -d' ' -f1 /proc/uptime)s ==="
 		cat /proc/cmdline
-		dmesg
-		[ -x /sbin/ip ] && { echo "=== ip link ==="; ip -br link 2>/dev/null; }
-	} > /tmp/be7000-bootlog.txt 2>&1
+		dmesg | head -c 45000
+		be7000_bootlog_state
+	} 2>&1 | head -c 63000 > /tmp/be7000-bootlog.txt
 	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
 }
 

@@ -1,0 +1,52 @@
+#!/bin/sh /etc/rc.common
+# Bring Wi-Fi up on a fresh install, with a password.
+#
+# The port generates an open network, so until 1.2.5 this script switched
+# both radios off and left the user to set things up over the cable. Two
+# boards then came up with the cable side unreachable and no way in at all:
+# once the system has booted and confirmed itself, the bootloader will not
+# fall back to stock any more, and without a console that is a dead end.
+# So now the radios come up with a known password instead, and Wi-Fi is the
+# second door in. The password is in the README and the instruction.
+#
+# This must fire on a fresh install and never again. The marker alone was not
+# enough: it lives outside the files sysupgrade preserves, so every upgrade
+# looked like a fresh install and touched a router that was already set up.
+# A restored /etc/config/wireless is the reliable sign of an upgrade. On a
+# fresh install the file does not exist yet at this point, it gets generated
+# later during boot, which is what the wait loop below is for.
+START=99
+
+MARK=/etc/.be7000_secure_defaults
+SSID=OpenWrt-BE7000
+KEY=be7000openwrt
+
+boot() {
+	[ -e "$MARK" ] && return 0
+
+	if [ -s /etc/config/wireless ]; then
+		# Came back from a backup, so the router was configured before.
+		touch "$MARK"
+		return 0
+	fi
+
+	(
+		i=0
+		while [ $i -lt 120 ]; do
+			uci -q get wireless.radio0 >/dev/null && uci -q get wireless.radio1 >/dev/null && break
+			i=$((i+1)); sleep 1
+		done
+		for r in 0 1; do
+			uci -q get wireless.radio$r >/dev/null || continue
+			uci -q set wireless.radio$r.disabled=0
+			uci -q set wireless.default_radio$r.disabled=0
+			uci -q set wireless.default_radio$r.ssid="$SSID"
+			uci -q set wireless.default_radio$r.encryption=psk2
+			uci -q set wireless.default_radio$r.key="$KEY"
+		done
+		uci commit wireless
+		touch "$MARK"
+		logger -t be7000-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands"
+		wifi reload
+	) </dev/null >/dev/null 2>&1 &
+}

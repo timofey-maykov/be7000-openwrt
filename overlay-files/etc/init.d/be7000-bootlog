@@ -4,15 +4,21 @@
 START=98
 
 start() {
-	local part
-	part=$(grep '"crash_syslog"' /proc/mtd | cut -d: -f1)
-	[ -n "$part" ] || return 0
+	grep -q '"crash_syslog"' /proc/mtd || return 0
 	{
 		echo "=== be7000 bootlog: boot done $(cut -d' ' -f1 /proc/uptime)s ==="
 		cat /proc/cmdline
-		dmesg
-		echo "=== ip link ==="
-		ip -br link 2>/dev/null
-	} > /tmp/be7000-bootlog.txt 2>&1
+		dmesg | head -c 45000
+		echo "=== ip addr ==="
+		ip addr 2>&1
+		echo "=== board.json ==="
+		ls -la /etc/board.json 2>&1
+		echo "=== uci network ==="
+		uci -q export network 2>&1
+		echo "=== overlay ==="
+		grep -E ' /overlay | / ' /proc/mounts
+		echo "=== logread ==="
+		logread 2>/dev/null | tail -n 80
+	} 2>&1 | head -c 63000 > /tmp/be7000-bootlog.txt
 	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
 }
