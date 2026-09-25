@@ -1,0 +1,193 @@
+#!/bin/sh
+# Check for and install a newer build of this firmware from GitHub Releases.
+#
+#   be7000-update status   [--json]   what is installed, what was last seen
+#   be7000-update check    [--json]   ask GitHub for the latest release
+#   be7000-update download [--json]   fetch sysupgrade.bin + sums into /tmp, verify
+#   be7000-update apply    [--yes]    download if needed, verify, sysupgrade
+#
+# Settings are kept across the upgrade (plain sysupgrade). The installed
+# version comes from /etc/be7000-release, which CI writes into the image; a
+# build without it is "dev" and never offers itself an upgrade.
+
+REPO="timofey-maykov/be7000-openwrt"
+API="https://api.github.com/repos/$REPO/releases/latest"
+RELEASE_FILE=/etc/be7000-release
+STATE=/tmp/be7000-update.json
+DIR=/tmp/be7000-update
+IMG="$DIR/sysupgrade.bin"
+SUMS="$DIR/sha256sums.txt"
+LOG=/tmp/be7000-update.log
+
+JSON=0
+YES=0
+for a in "$@"; do
+	case "$a" in
+	--json) JSON=1 ;;
+	--yes) YES=1 ;;
+	esac
+done
+CMD=${1:-status}
+
+installed_version() {
+	[ -r "$RELEASE_FILE" ] || { echo dev; return; }
+	local v
+	v=$(sed -n 's/^VERSION=//p' "$RELEASE_FILE" | head -1)
+	echo "${v:-dev}"
+}
+
+installed_field() {
+	[ -r "$RELEASE_FILE" ] || return 0
+	sed -n "s/^$1=//p" "$RELEASE_FILE" | head -1
+}
+
+json_escape() {
+	# good enough for text we print into our own JSON
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g' -e 's/\r//g' -e 's/\t/\\t/g'
+}
+
+# "1.2.5" from "v1.2.5-r20260925"
+tag_to_version() {
+	local t=${1#v}
+	echo "${t%%-*}"
+}
+
+# 0 when $1 is newer than $2
+newer() {
+	[ "$1" = "$2" ] && return 1
+	[ "$2" = dev ] && return 1
+	[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+}
+
+fail() {
+	if [ "$JSON" = 1 ]; then
+		printf '{"ok":false,"error":"%s"}\n' "$(json_escape "$1")"
+	else
+		echo "$1" >&2
+	fi
+	exit 1
+}
+
+fetch() {
+	# uclient-fetch is what busybox wget is here; it needs libustream for https
+	uclient-fetch -q -O "$2" --timeout=30 "$1" 2>>"$LOG"
+}
+
+do_check() {
+	local tmp=/tmp/be7000-release-latest.json
+	: >"$LOG"
+	fetch "$API" "$tmp" || fail "GitHub не отвечает или нет https (нужны ca-bundle и libustream, они есть с 1.2.5)"
+	local tag name date body img_url sums_url
+	tag=$(jsonfilter -i "$tmp" -e '@.tag_name' 2>/dev/null)
+	[ -n "$tag" ] || fail "не удалось разобрать ответ GitHub"
+	name=$(jsonfilter -i "$tmp" -e '@.name')
+	date=$(jsonfilter -i "$tmp" -e '@.published_at')
+	body=$(jsonfilter -i "$tmp" -e '@.body')
+	img_url=$(jsonfilter -i "$tmp" -e '@.assets[*].browser_download_url' | grep -- '-squashfs-sysupgrade\.bin$' | head -1)
+	sums_url=$(jsonfilter -i "$tmp" -e '@.assets[*].browser_download_url' | grep -- '/sha256sums\.txt$' | head -1)
+	img_size=$(jsonfilter -i "$tmp" -e '@.assets[*]' | jsonfilter -a -e '$[@.name~/sysupgrade\.bin$/].size' 2>/dev/null | head -1)
+	local latest cur avail=0
+	latest=$(tag_to_version "$tag")
+	cur=$(installed_version)
+	newer "$latest" "$cur" && avail=1
+	cat >"$STATE" <<EOJ
+{"checked_at":"$(date +%s)","tag":"$(json_escape "$tag")","latest":"$latest","name":"$(json_escape "$name")","published_at":"$(json_escape "$date")","body":"$(json_escape "$body")","image_url":"$(json_escape "$img_url")","sums_url":"$(json_escape "$sums_url")","image_size":${img_size:-0},"available":$avail}
+EOJ
+	rm -f "$tmp"
+}
+
+do_download() {
+	[ -s "$STATE" ] || do_check
+	local url sums
+	url=$(jsonfilter -i "$STATE" -e '@.image_url')
+	sums=$(jsonfilter -i "$STATE" -e '@.sums_url')
+	[ -n "$url" ] && [ -n "$sums" ] || fail "в релизе нет sysupgrade.bin или sha256sums.txt"
+	mkdir -p "$DIR"
+	# /tmp is RAM; make sure the image fits with room to spare for sysupgrade
+	local free
+	free=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+	[ "${free:-0}" -gt 120 ] || fail "мало свободной памяти для загрузки образа: ${free} МБ"
+	fetch "$sums" "$SUMS" || fail "не удалось скачать sha256sums.txt"
+	fetch "$url" "$IMG" || { rm -f "$IMG"; fail "не удалось скачать образ"; }
+	local want got
+	want=$(grep -- '-squashfs-sysupgrade\.bin' "$SUMS" | awk '{print $1}')
+	got=$(sha256sum "$IMG" | awk '{print $1}')
+	[ -n "$want" ] && [ "$want" = "$got" ] || { rm -f "$IMG"; fail "контрольная сумма не совпала"; }
+	echo "$got" >"$DIR/verified"
+}
+
+downloaded_ok() {
+	[ -s "$IMG" ] && [ -s "$DIR/verified" ] && [ "$(sha256sum "$IMG" | awk '{print $1}')" = "$(cat "$DIR/verified")" ]
+}
+
+# The cached answer from GitHub remembers whether it was newer than what was
+# installed at the time; recompute against what is installed now, or a
+# freshly flashed router would keep offering the version it already runs.
+refresh_available() {
+	[ -s "$STATE" ] || return 0
+	local latest cur avail=0
+	latest=$(jsonfilter -i "$STATE" -e '@.latest')
+	cur=$(installed_version)
+	newer "$latest" "$cur" && avail=1
+	sed -i "s/\"available\":[01truefals]*}/\"available\":$avail}/" "$STATE"
+}
+
+print_status() {
+	local cur tagf datef build
+	refresh_available
+	cur=$(installed_version)
+	tagf=$(installed_field TAG)
+	datef=$(installed_field DATE)
+	build=$(installed_field BUILD)
+	local dl=false
+	downloaded_ok && dl=true
+	if [ "$JSON" = 1 ]; then
+		local latest='null'
+		[ -s "$STATE" ] && latest=$(cat "$STATE")
+		printf '{"ok":true,"installed":{"version":"%s","tag":"%s","date":"%s","build":"%s"},"downloaded":%s,"latest":%s}\n' \
+			"$cur" "$(json_escape "$tagf")" "$(json_escape "$datef")" "$(json_escape "$build")" "$dl" "$latest"
+	else
+		echo "установлено: $cur${tagf:+ ($tagf)}${datef:+, собрано $datef}"
+		if [ -s "$STATE" ]; then
+			local latest avail
+			latest=$(jsonfilter -i "$STATE" -e '@.latest')
+			avail=$(jsonfilter -i "$STATE" -e '@.available')
+			if [ "$avail" = 1 ] || [ "$avail" = true ]; then
+				echo "доступно: $latest, be7000-update apply поставит её"
+			else
+				echo "последняя на GitHub: $latest, обновлять нечего"
+			fi
+		else
+			echo "на GitHub ещё не смотрели, be7000-update check"
+		fi
+		if $dl; then
+			echo "образ уже скачан и проверен: $IMG"
+		fi
+	fi
+	return 0
+}
+
+case "$CMD" in
+status)
+	print_status ;;
+check)
+	do_check; print_status ;;
+download)
+	do_download; print_status ;;
+apply)
+	[ -s "$STATE" ] || do_check
+	avail=$(jsonfilter -i "$STATE" -e '@.available')
+	if [ "$avail" != 1 ] && [ "$avail" != true ] && [ "$YES" != 1 ]; then
+		fail "новой версии нет, а принудительно только с --yes"
+	fi
+	downloaded_ok || do_download
+	if [ "$YES" != 1 ]; then
+		printf 'Поставить %s поверх %s? Настройки сохранятся, роутер перезагрузится. [y/N] ' "$(jsonfilter -i "$STATE" -e '@.latest')" "$(installed_version)"
+		read -r ans
+		case "$ans" in y|Y|д|Д) ;; *) echo "отменено"; exit 1 ;; esac
+	fi
+	echo "запускаю sysupgrade, связь пропадёт на пару минут" | tee -a "$LOG"
+	exec sysupgrade -v "$IMG" ;;
+*)
+	echo "usage: be7000-update status|check|download|apply [--json] [--yes]" >&2; exit 2 ;;
+esac

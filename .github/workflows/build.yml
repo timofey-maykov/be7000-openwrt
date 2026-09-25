@@ -181,6 +181,17 @@ jobs:
           f=files/etc/apk/repositories.d/customfeeds.list
           sed -i "s|feed/targets/$TARGET/packages/packages.adb|feed/targets/$TARGET/$VERMAGIC/packages/packages.adb|" "$f"
           grep "feed/targets" "$f"
+          # what be7000-update and the LuCI page report as the installed version
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in v*) VER="${TAG#v}"; VER="${VER%%-*}" ;; *) VER=dev ;; esac
+          {
+            echo "VERSION=$VER"
+            echo "TAG=$TAG"
+            echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "BUILD=${{ github.run_id }}"
+            echo "KERNEL=$VERMAGIC"
+          } > files/etc/be7000-release
+          cat files/etc/be7000-release
 
       - name: Build everything
         run: |

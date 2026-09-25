@@ -1,0 +1,64 @@
+'use strict';
+
+import { popen, access, readfile } from 'fs';
+
+const BIN = '/usr/sbin/be7000-update';
+const LOG = '/tmp/be7000-update.log';
+
+function shellquote(s) {
+	return `'${replace(s, "'", "'\\''")}'`;
+}
+
+function run(args) {
+	if (access(BIN) != true)
+		return { ok: false, output: 'be7000-update not found' };
+	let cmd = `${shellquote(BIN)} ${join(' ', map(args, shellquote))}`;
+	let fd = popen(`(${cmd}) 2>&1; echo __EXIT:$?`, 'r');
+	let all = fd ? fd.read('all') : '';
+	if (fd)
+		fd.close();
+	let m = match(all, /__EXIT:(\d+)\s*$/);
+	let code = m ? int(m[1]) : 1;
+	let output = trim(replace(all, /__EXIT:\d+\s*$/, ''));
+	return { ok: code == 0, code, output };
+}
+
+function query(sub) {
+	return {
+		call: function() {
+			let res = run([sub, '--json']);
+			try {
+				let data = json(res.output);
+				if (type(data) == 'object')
+					return data;
+			}
+			catch (e) {}
+			return { ok: false, error: res.output };
+		}
+	};
+}
+
+return {
+	'be7000-update': {
+		status: query('status'),
+		check: query('check'),
+		download: query('download'),
+		// sysupgrade never returns; start it detached and let the page poll
+		// until the router goes away.
+		apply: {
+			call: function() {
+				let fd = popen(`(${shellquote(BIN)} apply --yes >${LOG} 2>&1 &) ; echo started`, 'r');
+				let out = fd ? fd.read('all') : '';
+				if (fd)
+					fd.close();
+				return { ok: index(out, 'started') >= 0 };
+			}
+		},
+		log: {
+			call: function() {
+				let t = readfile(LOG);
+				return { ok: true, log: t ?? '' };
+			}
+		}
+	}
+};

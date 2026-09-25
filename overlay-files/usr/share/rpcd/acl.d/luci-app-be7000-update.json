@@ -1,0 +1,15 @@
+{
+	"luci-app-be7000-update": {
+		"description": "Check for and install firmware updates from GitHub",
+		"read": {
+			"ubus": {
+				"be7000-update": [ "status", "check", "log" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"be7000-update": [ "download", "apply" ]
+			}
+		}
+	}
+}
