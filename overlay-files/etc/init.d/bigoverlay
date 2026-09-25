@@ -94,17 +94,30 @@ rename_legacy() {
 # uci-defaults write it on a fresh install; after a sysupgrade it comes back
 # from the config backup, but only into the slot's own overlay, which is why
 # the switch never happens on the first boot after a flash.
+#
+# The device is whatever volume we found, not a fixed /dev/ubi1_0: stock
+# creates its "cfg" volume with volume id 1 (ubimkvol -n 1), so on a board
+# coming straight from stock the volume is /dev/ubi1_1. With the wrong path
+# fstools retries for fifteen seconds and falls back to the slot's own
+# overlay on every boot, and the shared volume is never used.
 ensure_fstab() {
-	[ -n "$(uci -q get fstab.bigoverlay)" ] && return 0
-	uci -q batch <<-EOT
-		set fstab.bigoverlay=mount
-		set fstab.bigoverlay.target='/overlay'
-		set fstab.bigoverlay.device='/dev/ubi1_0'
-		set fstab.bigoverlay.fstype='ubifs'
-		set fstab.bigoverlay.options='rw,noatime'
-		set fstab.bigoverlay.enabled='1'
-		commit fstab
-	EOT
+	local dev="$1"
+	[ -n "$dev" ] || dev=/dev/ubi1_0
+	if [ -z "$(uci -q get fstab.bigoverlay)" ]; then
+		uci -q batch <<-EOT
+			set fstab.bigoverlay=mount
+			set fstab.bigoverlay.target='/overlay'
+			set fstab.bigoverlay.device='$dev'
+			set fstab.bigoverlay.fstype='ubifs'
+			set fstab.bigoverlay.options='rw,noatime'
+			set fstab.bigoverlay.enabled='1'
+			commit fstab
+		EOT
+	elif [ "$(uci -q get fstab.bigoverlay.device)" != "$dev" ]; then
+		logger -t bigoverlay "fstab pointed at $(uci -q get fstab.bigoverlay.device), the volume is $dev, fixing"
+		uci -q set fstab.bigoverlay.device="$dev"
+		uci -q commit fstab
+	fi
 }
 
 # Reboot so that fstools picks the volume up as /overlay.
@@ -122,7 +135,7 @@ ensure_fstab() {
 # takes for some reason.
 switch_reboot() {
 	local dev="$1" why="$2" n=0
-	ensure_fstab
+	ensure_fstab "$dev"
 	mkdir -p /tmp/bigoverlay.sw
 	if mount -t ubifs "$dev" /tmp/bigoverlay.sw 2>/dev/null; then
 		[ -f /tmp/bigoverlay.sw/$SWITCH_TRIES ] && n=$(cat /tmp/bigoverlay.sw/$SWITCH_TRIES)
@@ -167,7 +180,10 @@ boot() {
 	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
 	# Already serving as /overlay: nothing left to do, forget any switch tries.
 	case "$(mount | grep ' on /overlay ')" in
-	/dev/ubi1_*) rm -f "/overlay/$SWITCH_TRIES"; return 0 ;;
+	/dev/ubi1_*)
+		rm -f "/overlay/$SWITCH_TRIES"
+		ensure_fstab "$(mount | grep ' on /overlay ' | cut -d' ' -f1)"
+		return 0 ;;
 	esac
 	[ -f "$STATE" ] && {
 		logger -t bigoverlay "previous attempt failed, not retrying"
