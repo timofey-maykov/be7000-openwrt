@@ -83,6 +83,7 @@
     "lsblk": "2.42.1-r1",
     "lua": "5.1.5-r11",
     "luci-app-be7000-nfc": "26.174.55716~358a7d9",
+    "luci-theme-nimbus": "0",
     "mkf2fs": "1.16.0-r4",
     "netifd": "2026.04.23~e45b890f-r1",
     "nftables-json": "1.1.6-r4",
