@@ -1,23 +1,39 @@
 #!/bin/sh
-# Save the kernel log into the crash_syslog partition as early as userspace
-# allows, so a board that never gets as far as the network can still be
-# diagnosed: boot stock afterwards and read it back with
+# Save the kernel log into the crash_syslog partition, so a board that never
+# gets as far as the network can still be diagnosed: boot stock afterwards and
+# read it back with
 #   dd if=/dev/mtd27 bs=64k 2>/dev/null | strings
-# (crash_syslog is mtd27 on both stock and this image). A later copy from
-# /etc/init.d/be7000-bootlog overwrites it with the full log once boot is done,
-# so whatever is in there is the furthest the last boot got. Kernel panics go
-# to the neighbouring "crash" partition through mtdoops, see the bootargs.
+# (crash_syslog is mtd27 on both stock and this image).
+#
+# One copy is taken here, at the start of preinit, and then a background loop
+# keeps rewriting it every 15 seconds for four minutes. A boot that hangs in
+# preinit (a driver stuck opening a port, say) still has a live kernel, so the
+# loop keeps going and the last copy shows the hung-task traces the kernel
+# prints after two minutes. /etc/init.d/be7000-bootlog takes the final copy
+# once boot is done. Kernel panics go to the neighbouring "crash" partition
+# through mtdoops, see the bootargs.
 
-be7000_bootlog_early() {
-	local part
-	part=$(grep '"crash_syslog"' /proc/mtd | cut -d: -f1)
-	[ -n "$part" ] || return 0
+be7000_bootlog_write() {
+	grep -q '"crash_syslog"' /proc/mtd || return 0
 	{
-		echo "=== be7000 bootlog: preinit $(cat /proc/uptime | cut -d' ' -f1)s ==="
+		echo "=== be7000 bootlog: $1 $(cut -d' ' -f1 /proc/uptime)s ==="
 		cat /proc/cmdline
 		dmesg
+		[ -x /sbin/ip ] && { echo "=== ip link ==="; ip -br link 2>/dev/null; }
 	} > /tmp/be7000-bootlog.txt 2>&1
 	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
+}
+
+be7000_bootlog_early() {
+	be7000_bootlog_write preinit
+	(
+		i=0
+		while [ $i -lt 16 ]; do
+			sleep 15
+			i=$((i + 1))
+			be7000_bootlog_write "periodic $i"
+		done
+	) </dev/null >/dev/null 2>&1 &
 }
 
 boot_hook_add preinit_main be7000_bootlog_early
