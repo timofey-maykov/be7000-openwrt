@@ -58,6 +58,9 @@ be7000_bootlog_state() {
 	logread 2>/dev/null | tail -n 600
 }
 
+# The copy taken in preinit, before the overlay is mounted, carries dmesg
+# only: it is the one that must never get in the way of the boot. Every later
+# copy carries the full state.
 be7000_bootlog_write() {
 	grep -q '"crash_syslog"' /proc/mtd || return 0
 	{
@@ -65,7 +68,7 @@ be7000_bootlog_write() {
 		cat /proc/cmdline
 		echo "=== dmesg ==="
 		dmesg | head -c 200000
-		be7000_bootlog_state
+		[ "$1" = preinit ] || be7000_bootlog_state
 		echo "=== end ==="
 	} 2>&1 | head -c 480000 > /tmp/be7000-bootlog.txt
 	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
