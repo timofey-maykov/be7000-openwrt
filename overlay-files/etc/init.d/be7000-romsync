@@ -69,11 +69,21 @@ reinstall_pending() {
 			sleep 10; i=$((i + 1))
 		done
 		sleep 15
-		if apk update >/dev/null 2>&1 && apk add $(cat "$PENDING") >/tmp/be7000-reinstall.log 2>&1; then
+		# downloads from GitHub Pages occasionally get reset mid-way; a few
+		# tries are cheap, apk skips what is already there
+		local n=0 ok=0
+		while [ $n -lt 5 ]; do
+			n=$((n + 1))
+			if apk update >/dev/null 2>&1 && apk add $(cat "$PENDING") >/tmp/be7000-reinstall.log 2>&1; then
+				ok=1; break
+			fi
+			sleep 20
+		done
+		if [ $ok = 1 ]; then
 			logger -t be7000-romsync "reinstalled after image change: $(cat "$PENDING" | tr '\n' ' ')"
 			rm -f "$PENDING"
 		else
-			logger -t be7000-romsync "reinstall failed, will retry next boot: $(tail -1 /tmp/be7000-reinstall.log)"
+			logger -t be7000-romsync "reinstall failed after $n tries, will retry next boot: $(tail -1 /tmp/be7000-reinstall.log)"
 		fi
 	) </dev/null >/dev/null 2>&1 &
 }

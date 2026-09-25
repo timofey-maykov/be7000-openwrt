@@ -69,8 +69,16 @@ fail() {
 }
 
 fetch() {
-	# uclient-fetch is what busybox wget is here; it needs libustream for https
-	uclient-fetch -q -O "$2" --timeout=30 "$1" 2>>"$LOG"
+	# uclient-fetch is what busybox wget is here; it needs libustream for https.
+	# Connections to GitHub get reset now and then, so try a few times.
+	local n=0
+	while [ $n -lt 4 ]; do
+		n=$((n + 1))
+		uclient-fetch -q -O "$2" --timeout=30 "$1" 2>>"$LOG" && return 0
+		rm -f "$2"
+		sleep 3
+	done
+	return 1
 }
 
 do_check() {
