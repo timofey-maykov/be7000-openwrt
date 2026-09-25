@@ -19,7 +19,7 @@
 
 be7000_stale_modules_vol() {
 	local dev="$1" mnt=/tmp/be7000-stale-modules
-	local kver rom_k ov_k dir
+	local kver rom_k ov_k dir stale
 	kver=$(uname -r)
 	mkdir -p "$mnt"
 	mount -t ubifs -o noatime "$dev" "$mnt" 2>/dev/null || return 0
@@ -30,7 +30,9 @@ be7000_stale_modules_vol() {
 		if [ -n "$rom_k" ] && [ -n "$ov_k" ] && [ "$rom_k" != "$ov_k" ]; then
 			echo "- be7000: modules in overlay ($dev) were built for kernel ${ov_k##*~}, this ROM has ${rom_k##*~}; setting them aside -"
 			rm -rf "$mnt"/upper/lib/modules.stale-*
-			mv "$dir" "$mnt/upper/lib/modules.stale-${ov_k##*~}"
+			stale="$mnt/upper/lib/modules.stale-${ov_k##*~}"
+			mkdir -p "$stale" && mv "$dir" "$stale/"
+			rmdir "$mnt/upper/lib/modules" 2>/dev/null
 			sync
 		fi
 	fi
