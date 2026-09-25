@@ -129,6 +129,8 @@ jobs:
           cp ../repo/config.buildinfo .config
           echo "CONFIG_SIGNED_PACKAGES=y" >> .config
           echo "CONFIG_SIGNATURE_CHECK=y" >> .config
+          # compiler cache between runs, see the ccache step below
+          echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           echo "packages as modules: $(grep -c '=m$' .config)"
 
@@ -147,6 +149,18 @@ jobs:
           key: owrt-${{ env.OWRT_COMMIT }}-${{ hashFiles('repo/feeds-pins.txt') }}
           restore-keys: |
             owrt-${{ env.OWRT_COMMIT }}-
+
+      # The toolchain cache above only skips building the compiler; this one
+      # makes the compiler skip work it has already done. The key is unique
+      # per run so every run saves its own snapshot, and restore-keys pick
+      # the most recent one. Roughly halves the kernel and world steps.
+      - name: Cache compiler output
+        uses: actions/cache@v4
+        with:
+          path: owrt/.ccache
+          key: ccache-${{ env.OWRT_COMMIT }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ env.OWRT_COMMIT }}-
 
       - name: Download sources
         run: cd owrt && make -j"$(nproc)" download
@@ -172,6 +186,10 @@ jobs:
         run: |
           cd owrt
           make -j"$(nproc)" world || make -j1 V=s world
+
+      - name: ccache statistics
+        if: always()
+        run: cd owrt && (staging_dir/host/bin/ccache -s 2>/dev/null || ccache -s 2>/dev/null || echo "no ccache binary yet")
 
       - name: Check the image is clean
         run: |
