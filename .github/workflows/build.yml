@@ -87,6 +87,8 @@ jobs:
           mkdir -p files
           cp -a ../repo/overlay-files/. files/
           cp -a ../repo/awg-feed .
+          # the LuCI theme lives in this repo, not in any feed
+          cp -a ../repo/luci-theme-nimbus package/
 
       - name: Signing key
         env:

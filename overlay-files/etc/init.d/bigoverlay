@@ -100,6 +100,17 @@ boot() {
 	dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
 	migrate "$dev" || return 0
 	rm -f "$STATE"
+	# The installer hands this slot to the bootloader as a one-shot try
+	# (flag_ota_reboot=1); the bootloader clears flag_boot_success on the way
+	# in and expects the system to confirm before the next boot. We reboot
+	# here on purpose, long before be7000-bootconfirm (START=99) gets a chance,
+	# and without this the bootloader would treat that reboot as a failed try
+	# and go back to stock. Re-arm the try instead: leave flag_last_success on
+	# stock, so a boot that really fails still falls back, and let the confirm
+	# service settle it once the switched-over system is up.
+	if [ "$(fw_printenv -n flag_ota_reboot 2>/dev/null)" = "1" ]; then
+		fw_setenv flag_boot_success 1 || logger -t bigoverlay "could not re-arm flag_boot_success"
+	fi
 	logger -t bigoverlay "prepared, rebooting to switch /overlay over"
 	sync
 	reboot
