@@ -1,34 +1,41 @@
 #!/bin/sh /etc/rc.common
 # Bring Wi-Fi up on a fresh install, with a password.
 #
-# The port generates an open network, so until 1.2.5 this script switched
-# both radios off and left the user to set things up over the cable. Two
-# boards then came up with the cable side unreachable and no way in at all:
-# once the system has booted and confirmed itself, the bootloader will not
-# fall back to stock any more, and without a console that is a dead end.
-# So now the radios come up with a known password instead, and Wi-Fi is the
-# second door in. The password is in the README and the instruction.
+# The port generates both networks without a password and disabled, so
+# until 1.2.5 this script switched both radios off and left the user to set
+# things up over the cable. Boards whose LAN never answered were then left
+# with no way in at all: once the system has booted and confirmed itself,
+# the bootloader will not fall back to stock any more. So now a fresh install
+# gets a known network (see README and the instruction) as a second door.
 #
-# This must fire on a fresh install and never again. The marker alone was not
-# enough: it lives outside the files sysupgrade preserves, so every upgrade
-# looked like a fresh install and touched a router that was already set up.
-# A restored /etc/config/wireless is the reliable sign of an upgrade. On a
-# fresh install the file does not exist yet at this point, it gets generated
-# later during boot, which is what the wait loop below is for.
+# Fresh install or upgrade? Not by whether /etc/config/wireless exists: the
+# Wi-Fi drivers come up asynchronously and hotplug generates that file around
+# 35-40 s into the first boot, before S99, so it always exists here and every
+# fresh install looked like an upgrade (that was the case from 1.2.2 to
+# 1.2.6). What decides instead:
+#   - the marker below, which sysupgrade.conf carries across upgrades since
+#     1.2.2;
+#   - for upgrades from older images, which do not carry the marker: a
+#     network that has any encryption set was configured by someone, the
+#     generated config never has one. An open network kept on purpose on such
+#     an old image would get the default password; that is the one trade-off.
 START=99
 
 MARK=/etc/.be7000_secure_defaults
 SSID=OpenWrt-BE7000
 KEY=be7000openwrt
 
+configured() {
+	local r enc
+	for r in 0 1; do
+		enc="$(uci -q get wireless.default_radio$r.encryption)"
+		[ -n "$enc" ] && [ "$enc" != "none" ] && return 0
+	done
+	return 1
+}
+
 boot() {
 	[ -e "$MARK" ] && return 0
-
-	if [ -s /etc/config/wireless ]; then
-		# Came back from a backup, so the router was configured before.
-		touch "$MARK"
-		return 0
-	fi
 
 	(
 		i=0
@@ -36,6 +43,11 @@ boot() {
 			uci -q get wireless.radio0 >/dev/null && uci -q get wireless.radio1 >/dev/null && break
 			i=$((i+1)); sleep 1
 		done
+		if configured; then
+			touch "$MARK"
+			logger -t be7000-wifi-defaults "wireless already configured, left as is"
+			exit 0
+		fi
 		for r in 0 1; do
 			uci -q get wireless.radio$r >/dev/null || continue
 			uci -q set wireless.radio$r.disabled=0
