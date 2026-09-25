@@ -1,14 +1,31 @@
 #!/bin/sh /etc/rc.common
-# Prepare the spare "overlay" partition so /overlay can live there.
+# Put /overlay on the spare "overlay" partition, inside the stock firmware's
+# own settings volume.
 #
-# The kernel attaches it as ubi1 (ubi.mtd=overlay on the command line). If it
-# does not carry a prepared volume yet, create one, copy the current overlay
-# across and reboot so that fstools mounts it during preinit. See
+# The kernel attaches the partition as ubi1 (ubi.mtd=overlay on the command
+# line). Stock keeps its settings there in a UBIFS volume called "cfg" that
+# spans the whole partition, mounted as /data. Stock's preinit deletes any
+# UBI volume it does not know, but it never touches directories it does not
+# know inside its own volume, and it only wipes the partition on a factory
+# reset. So we share the volume: our overlayfs upper/ and work/ live next to
+# stock's etc/ and userdisk/, and a rollback to stock finds its settings and
+# its SSH root exactly as they were. Versions 1.2 to 1.2.5 formatted the
+# partition instead and created a volume "overlay_data"; that volume is
+# renamed to "cfg" on the first boot after the upgrade, and because it holds
+# no stock settings, rollback-to-stock.sh then asks stock to repopulate
+# /data/etc from its ROM (flag_format_overlay), as before.
+#
+# The first boot after a sysupgrade or after the installer runs on the slot's
+# own small overlay; this script copies it into the volume once (fresh
+# install) and reboots so that fstools mounts the volume as /overlay. See
 # /etc/config/bigoverlay to opt out.
 START=11
 
 STATE=/etc/bigoverlay.failed
-VOLNAME=overlay_data
+# stock's volume name (lib/preinit/00_preinit.conf: pi_overlay_partitions="cfg:/data:")
+STOCK_VOLNAME=cfg
+# what bigoverlay 1.2 to 1.2.5 created after formatting the partition
+LEGACY_VOLNAME=overlay_data
 # Written into the volume once the settings have been copied in. An existing
 # volume is NOT enough to call it done: an empty one mounted as /overlay comes
 # up with factory defaults and looks like the router lost its configuration.
@@ -16,15 +33,25 @@ STAMP=.bigoverlay_migrated
 # How many reboots we already spent trying to get fstools to mount the volume.
 SWITCH_TRIES=.bigoverlay_switch_tries
 
+# The volume to live in: stock's, else the legacy one, else whatever is there.
 volume_dev() {
-	local n
+	local n name first=""
 	for n in /sys/class/ubi/ubi1_*/name; do
 		[ -e "$n" ] || continue
-		[ "$(cat "$n")" = "$VOLNAME" ] || continue
-		echo "/dev/$(basename "$(dirname "$n")")"
-		return 0
+		name="$(cat "$n")"
+		[ -z "$first" ] && first="/dev/$(basename "$(dirname "$n")")"
+		[ "$name" = "$STOCK_VOLNAME" ] && { echo "/dev/$(basename "$(dirname "$n")")"; return 0; }
 	done
+	for n in /sys/class/ubi/ubi1_*/name; do
+		[ -e "$n" ] || continue
+		[ "$(cat "$n")" = "$LEGACY_VOLNAME" ] && { echo "/dev/$(basename "$(dirname "$n")")"; return 0; }
+	done
+	[ -n "$first" ] && { echo "$first"; return 0; }
 	return 1
+}
+
+volume_name() {
+	cat "/sys/class/ubi/$(basename "$1")/name" 2>/dev/null
 }
 
 migrated() {
@@ -37,16 +64,30 @@ migrated() {
 	return $rc
 }
 
+# Copy the slot's overlay into the volume, next to whatever stock keeps there.
 migrate() {
 	local dev="$1"
 	mkdir -p /tmp/bigoverlay
 	mount -t ubifs "$dev" /tmp/bigoverlay || { logger -t bigoverlay "mount failed"; return 1; }
-	cp -a /overlay/upper /tmp/bigoverlay/ 2>/dev/null
-	mkdir -p /tmp/bigoverlay/work
+	mkdir -p /tmp/bigoverlay/upper /tmp/bigoverlay/work
+	cp -a /overlay/upper/. /tmp/bigoverlay/upper/ 2>/dev/null
 	: > "/tmp/bigoverlay/$STAMP"
 	sync
 	umount /tmp/bigoverlay
 	return 0
+}
+
+# A volume left by bigoverlay 1.2 to 1.2.5 gets stock's name, so that stock
+# keeps it (and our data in it) instead of deleting it on a rollback. Only
+# possible while the volume is not mounted, which is the case here.
+rename_legacy() {
+	local dev="$1"
+	[ "$(volume_name "$dev")" = "$LEGACY_VOLNAME" ] || return 0
+	if ubirename /dev/ubi1 "$LEGACY_VOLNAME" "$STOCK_VOLNAME" 2>/dev/null; then
+		logger -t bigoverlay "renamed volume $LEGACY_VOLNAME to $STOCK_VOLNAME so stock leaves it alone"
+	else
+		logger -t bigoverlay "could not rename volume $LEGACY_VOLNAME, stock will replace it on a rollback"
+	fi
 }
 
 # fstab is what makes fstools mount the volume as /overlay on the next boot.
@@ -104,12 +145,26 @@ switch_reboot() {
 	reboot
 }
 
+# Only when the partition carries no UBI at all (the kernel could not attach
+# it, or it is attached but empty): nothing is there to preserve. Create the
+# volume under stock's name and tell stock to repopulate /data/etc from its
+# ROM when it next boots, the same way stock itself handles a blank partition.
+make_volume() {
+	local mtdnum
+	mtdnum="$(grep '"overlay"' /proc/mtd | cut -d: -f1 | tr -dc '0-9')"
+	[ -n "$mtdnum" ] || { logger -t bigoverlay "no overlay partition in /proc/mtd"; return 1; }
+	if [ ! -d /sys/class/ubi/ubi1 ]; then
+		logger -t bigoverlay "mtd$mtdnum carries no UBI, formatting it"
+		ubiformat "/dev/mtd$mtdnum" -y -q || { logger -t bigoverlay "ubiformat failed"; return 1; }
+		ubiattach -m "$mtdnum" >/dev/null 2>&1 || { logger -t bigoverlay "ubiattach failed"; return 1; }
+	fi
+	ubimkvol /dev/ubi1 -N "$STOCK_VOLNAME" -m >/dev/null 2>&1 || { logger -t bigoverlay "ubimkvol failed"; return 1; }
+	fw_setenv flag_format_overlay 1 2>/dev/null || logger -t bigoverlay "could not set flag_format_overlay"
+	return 0
+}
+
 boot() {
 	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
-	[ -d /sys/class/ubi/ubi1 ] || {
-		logger -t bigoverlay "spare overlay partition not attached, nothing to do"
-		return 0
-	}
 	# Already serving as /overlay: nothing left to do, forget any switch tries.
 	case "$(mount | grep ' on /overlay ')" in
 	/dev/ubi1_*) rm -f "/overlay/$SWITCH_TRIES"; return 0 ;;
@@ -121,44 +176,24 @@ boot() {
 
 	local dev
 	dev="$(volume_dev)"
-
-	if [ -n "$dev" ]; then
-		if migrated "$dev"; then
-			# Prepared earlier, but this boot runs on the slot's own overlay:
-			# the first boot after a sysupgrade, or after the installer.
-			switch_reboot "$dev" "settings partition is ready"
-			return 0
-		fi
-		logger -t bigoverlay "volume exists but holds no settings yet, copying them in"
+	if [ -z "$dev" ]; then
 		: > "$STATE"
-		migrate "$dev" || return 0
+		make_volume || return 0
 		rm -f "$STATE"
-		switch_reboot "$dev" "settings copied"
-		return 0
+		dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
 	fi
 
-	local mtdnum
-	mtdnum="$(grep '"overlay"' /proc/mtd | cut -d: -f1 | tr -dc '0-9')"
-	[ -n "$mtdnum" ] || {
-		logger -t bigoverlay "no overlay partition in /proc/mtd"
+	rename_legacy "$dev"
+
+	if migrated "$dev"; then
+		# Prepared earlier, but this boot runs on the slot's own overlay:
+		# the first boot after a sysupgrade, or after the installer.
+		switch_reboot "$dev" "settings partition is ready"
 		return 0
-	}
-
+	fi
+	logger -t bigoverlay "copying the settings into the shared volume on mtd28 ($(volume_name "$dev"))"
 	: > "$STATE"
-	logger -t bigoverlay "preparing mtd$mtdnum, this erases the stock settings stored there"
-	ubidetach -m "$mtdnum" >/dev/null 2>&1
-	ubiformat "/dev/mtd$mtdnum" -y -q || { logger -t bigoverlay "ubiformat failed"; return 0; }
-	ubiattach -m "$mtdnum" >/dev/null 2>&1 || { logger -t bigoverlay "ubiattach failed"; return 0; }
-	ubimkvol /dev/ubi1 -N "$VOLNAME" -m >/dev/null 2>&1 || { logger -t bigoverlay "ubimkvol failed"; return 0; }
-	# Stock keeps its settings on this partition. When it boots again it only
-	# repopulates /data/etc from the ROM if this flag is set; otherwise it sees
-	# a formatted UBI, drops our volume, creates an empty "data" and binds an
-	# empty /data/etc/config over /etc/config. That leaves stock with no uci
-	# config at all, dropbear included. The bootloader ignores the flag.
-	fw_setenv flag_format_overlay 1 2>/dev/null || logger -t bigoverlay "could not set flag_format_overlay"
-
-	dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
 	migrate "$dev" || return 0
 	rm -f "$STATE"
-	switch_reboot "$dev" "prepared"
+	switch_reboot "$dev" "settings copied"
 }

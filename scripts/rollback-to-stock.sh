@@ -11,10 +11,22 @@ for arg in $(cat /proc/cmdline); do
 	esac
 done
 case "$CUR" in rootfs) OTHER=1 ;; rootfs_1) OTHER=0 ;; *) echo "unexpected ubi.mtd=$CUR"; exit 1 ;; esac
-# If bigoverlay took the stock settings partition, tell stock to repopulate
-# /data/etc from its ROM on the next boot; otherwise it comes up with an empty
-# /etc/config and even SSH will not start.
-grep -q "ubi.mtd=overlay" /proc/cmdline && fw_setenv flag_format_overlay 1
+# /overlay shares stock's settings volume on mtd28 (bigoverlay). If that volume
+# still holds stock's own /data/etc, stock simply picks its settings up again.
+# If it does not (the partition was formatted by bigoverlay 1.2 to 1.2.5 and
+# the volume only carries our files), tell stock to repopulate /data/etc from
+# its ROM; otherwise it comes up with an empty /etc/config and even SSH will
+# not start.
+case "$(grep ' /overlay ' /proc/mounts | cut -d' ' -f1)" in
+/dev/ubi1_*)
+	if [ -n "$(ls /overlay/etc/config 2>/dev/null)" ]; then
+		echo "stock settings found on mtd28, stock will boot with them"
+	else
+		fw_setenv flag_format_overlay 1
+		echo "no stock settings on mtd28, stock will boot with factory defaults"
+	fi
+	;;
+esac
 fw_setenv flag_boot_rootfs $OTHER && fw_setenv flag_last_success $OTHER && fw_setenv flag_boot_success 1 \
  && fw_setenv flag_try_sys1_failed 0 && fw_setenv flag_try_sys2_failed 0 && fw_setenv flag_ota_reboot 0 \
  && echo "next boot: slot $OTHER (was $CUR). Now run: reboot"

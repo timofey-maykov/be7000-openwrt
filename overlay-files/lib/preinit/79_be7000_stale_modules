@@ -46,7 +46,7 @@ be7000_stale_modules() {
 		[ -e "$n" ] || continue
 		name=$(cat "$n")
 		case "$name" in
-		rootfs_data|overlay_data)
+		rootfs_data|overlay_data|cfg)
 			be7000_stale_modules_vol "/dev/$(basename "$(dirname "$n")")"
 			;;
 		esac
