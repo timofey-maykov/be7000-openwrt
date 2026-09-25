@@ -27,6 +27,14 @@ be7000_bootlog_state() {
 	uci -q export network 2>&1
 	echo "=== overlay ==="
 	grep -E ' /overlay | / ' /proc/mounts
+	echo "=== link ==="
+	for i in wan lan1 lan2 lan3; do [ -x /usr/sbin/ethtool ] && ethtool $i 2>/dev/null | grep -E 'Speed|Duplex|Link detected' | tr '\n' ' '; echo " ($i)"; done
+	[ -x /sbin/ip ] && ip -s link show 2>/dev/null | grep -A5 -E '^[0-9]+: (wan|lan[123]|br-lan):' | grep -E '^[0-9]+:|RX:|TX:| [0-9]+ ' | head -40
+	echo "=== wireless ==="
+	uci -q export wireless 2>&1 | grep -vE 'option key'
+	iw dev 2>&1 | grep -E 'Interface|ssid|channel|type'
+	echo "=== be7000 services ==="
+	logread 2>/dev/null | grep -E 'bigoverlay|romsync|be7000-feeds|wifi-defaults|bootconfirm|AP-ENABLED|AP-DISABLED|hostapd.*(phy[01]-ap0)' | tail -n 25
 	if [ -x /sbin/logread ]; then
 		echo "=== logread ==="
 		logread 2>/dev/null | tail -n 80
