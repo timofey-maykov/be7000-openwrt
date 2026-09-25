@@ -13,6 +13,8 @@ VOLNAME=overlay_data
 # volume is NOT enough to call it done: an empty one mounted as /overlay comes
 # up with factory defaults and looks like the router lost its configuration.
 STAMP=.bigoverlay_migrated
+# How many reboots we already spent trying to get fstools to mount the volume.
+SWITCH_TRIES=.bigoverlay_switch_tries
 
 volume_dev() {
 	local n
@@ -47,15 +49,70 @@ migrate() {
 	return 0
 }
 
+# fstab is what makes fstools mount the volume as /overlay on the next boot.
+# uci-defaults write it on a fresh install; after a sysupgrade it comes back
+# from the config backup, but only into the slot's own overlay, which is why
+# the switch never happens on the first boot after a flash.
+ensure_fstab() {
+	[ -n "$(uci -q get fstab.bigoverlay)" ] && return 0
+	uci -q batch <<-EOT
+		set fstab.bigoverlay=mount
+		set fstab.bigoverlay.target='/overlay'
+		set fstab.bigoverlay.device='/dev/ubi1_0'
+		set fstab.bigoverlay.fstype='ubifs'
+		set fstab.bigoverlay.options='rw,noatime'
+		set fstab.bigoverlay.enabled='1'
+		commit fstab
+	EOT
+}
+
+# Reboot so that fstools picks the volume up as /overlay.
+#
+# The installer hands this slot to the bootloader as a one-shot try
+# (flag_ota_reboot=1); the bootloader clears flag_boot_success on the way in
+# and expects the system to confirm before the next boot. We reboot here on
+# purpose, long before be7000-bootconfirm (START=99) gets a chance, and
+# without the re-arm the bootloader would treat that reboot as a failed try
+# and go back to stock. flag_last_success stays on stock, so a boot that
+# really fails still falls back, and the confirm service settles it once the
+# switched-over system is up.
+#
+# A counter inside the volume stops this from looping if the switch never
+# takes for some reason.
+switch_reboot() {
+	local dev="$1" why="$2" n=0
+	ensure_fstab
+	mkdir -p /tmp/bigoverlay.sw
+	if mount -t ubifs "$dev" /tmp/bigoverlay.sw 2>/dev/null; then
+		[ -f /tmp/bigoverlay.sw/$SWITCH_TRIES ] && n=$(cat /tmp/bigoverlay.sw/$SWITCH_TRIES)
+		n=$((n + 1))
+		echo "$n" > /tmp/bigoverlay.sw/$SWITCH_TRIES
+		sync
+		umount /tmp/bigoverlay.sw
+	fi
+	rmdir /tmp/bigoverlay.sw 2>/dev/null
+	if [ "$n" -gt 2 ]; then
+		logger -t bigoverlay "$why, but /overlay did not switch after $((n - 1)) reboots, giving up"
+		: > "$STATE"
+		return 0
+	fi
+	if [ "$(fw_printenv -n flag_ota_reboot 2>/dev/null)" = "1" ]; then
+		fw_setenv flag_boot_success 1 || logger -t bigoverlay "could not re-arm flag_boot_success"
+	fi
+	logger -t bigoverlay "$why, rebooting to switch /overlay over"
+	sync
+	reboot
+}
+
 boot() {
 	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
 	[ -d /sys/class/ubi/ubi1 ] || {
 		logger -t bigoverlay "spare overlay partition not attached, nothing to do"
 		return 0
 	}
-	# Already serving as /overlay: nothing left to do.
+	# Already serving as /overlay: nothing left to do, forget any switch tries.
 	case "$(mount | grep ' on /overlay ')" in
-	/dev/ubi1_*) return 0 ;;
+	/dev/ubi1_*) rm -f "/overlay/$SWITCH_TRIES"; return 0 ;;
 	esac
 	[ -f "$STATE" ] && {
 		logger -t bigoverlay "previous attempt failed, not retrying"
@@ -66,14 +123,17 @@ boot() {
 	dev="$(volume_dev)"
 
 	if [ -n "$dev" ]; then
-		migrated "$dev" && return 0
+		if migrated "$dev"; then
+			# Prepared earlier, but this boot runs on the slot's own overlay:
+			# the first boot after a sysupgrade, or after the installer.
+			switch_reboot "$dev" "settings partition is ready"
+			return 0
+		fi
 		logger -t bigoverlay "volume exists but holds no settings yet, copying them in"
 		: > "$STATE"
 		migrate "$dev" || return 0
 		rm -f "$STATE"
-		logger -t bigoverlay "settings copied, rebooting to switch /overlay over"
-		sync
-		reboot
+		switch_reboot "$dev" "settings copied"
 		return 0
 	fi
 
@@ -100,18 +160,5 @@ boot() {
 	dev="$(volume_dev)" || { logger -t bigoverlay "volume missing after creation"; return 0; }
 	migrate "$dev" || return 0
 	rm -f "$STATE"
-	# The installer hands this slot to the bootloader as a one-shot try
-	# (flag_ota_reboot=1); the bootloader clears flag_boot_success on the way
-	# in and expects the system to confirm before the next boot. We reboot
-	# here on purpose, long before be7000-bootconfirm (START=99) gets a chance,
-	# and without this the bootloader would treat that reboot as a failed try
-	# and go back to stock. Re-arm the try instead: leave flag_last_success on
-	# stock, so a boot that really fails still falls back, and let the confirm
-	# service settle it once the switched-over system is up.
-	if [ "$(fw_printenv -n flag_ota_reboot 2>/dev/null)" = "1" ]; then
-		fw_setenv flag_boot_success 1 || logger -t bigoverlay "could not re-arm flag_boot_success"
-	fi
-	logger -t bigoverlay "prepared, rebooting to switch /overlay over"
-	sync
-	reboot
+	switch_reboot "$dev" "prepared"
 }
