@@ -105,10 +105,18 @@ jobs:
       - name: Pin and install feeds
         run: |
           cd owrt
+          # The port's feeds.conf.default has bare URLs, so the pin is appended
+          # rather than replaced; a line that already carries ^rev or ;branch
+          # is cut back to the URL first.
           while read -r name rev _; do
             [ -n "$name" ] || continue
-            sed -i "s|^\(src-git\(-full\)\? $name .*\)\(\^\|;\).*$|\1^$rev|" feeds.conf.default || true
+            sed -i -E "s|^(src-git(-full)? $name [^ ^;]+).*$|\1^$rev|" feeds.conf.default
           done < ../repo/feeds-pins.txt
+          echo "=== feeds.conf.default ==="
+          cat feeds.conf.default
+          for name in $(cut -d" " -f1 ../repo/feeds-pins.txt); do
+            grep -q "^src-git\(-full\)\? $name .*\^" feeds.conf.default || { echo "pin for $name did not apply" >&2; exit 1; }
+          done
           grep -q '^src-link awg ' feeds.conf.default || echo "src-link awg $PWD/awg-feed" >> feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
