@@ -2,6 +2,7 @@
   "version": 2,
   "architecture": "aarch64_cortex-a73",
   "packages": {
-    "amneziawg-tools": "2026.08.12-r1"
+    "amneziawg-tools": "2026.08.12-r1",
+    "luci-app-be7000-update": "1.0-r1"
   }
 }
