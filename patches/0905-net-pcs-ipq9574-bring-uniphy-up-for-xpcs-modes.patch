@@ -1,0 +1,122 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: ipq9574: bring UNIPHY up for XPCS modes like the vendor SDK
+
+On some BE7000 boards no Ethernet port ever receives a frame: the QCA8084
+never locks to a 10GBASE-R stream from the SoC, not at PHY attach and not
+after the port is opened and the SoC PCS is configured (patch 0903 retried
+the PHY side and it stayed unlocked). Boards where it works have a
+bootloader that brought the UNIPHY up before Linux.
+
+U-Boot (ppe_uniphy_uqxgmii_mode_set) and SSDK
+(__adpt_hppe_uniphy_usxgmii_mode_set) do three things for USXGMII/UQXGMII
+that ipq_pcs_config_mode() did not:
+- write MISC2 = 0x70 (mainline only programs MISC2 for SGMII modes);
+- clear the "loss of signal from SFP" link detection on copper PHYs;
+- soft reset the whole UNIPHY in GCC (GCC_UNIPHY*_SYS_RESET, 100 ms)
+  with the mode set, before calibration.
+
+Do the same when an optional "sys" reset is given, and log whether the
+SoC side sees a locked 10GBASE-R stream from the PHY once the XPCS is out
+of reset, which tells the two directions of the link apart.
+---
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 0544fc1..ea439ce 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -27,6 +27,12 @@
+ #define PCS_MISC2_MODE_MASK		GENMASK(6, 5)
+ #define PCS_MISC2_MODE_SGMII		FIELD_PREP(PCS_MISC2_MODE_MASK, 0x1)
+ #define PCS_MISC2_MODE_SGMII_PLUS	FIELD_PREP(PCS_MISC2_MODE_MASK, 0x2)
++/* Value the vendor SDK (U-Boot and SSDK) programs for USXGMII/UQXGMII */
++#define PCS_MISC2_XPCS_MASK		GENMASK(6, 4)
++#define PCS_MISC2_XPCS_VAL		0x70
++
++#define PCS_LINK_DETECT			0x570
++#define PCS_LINK_DETECT_LOS_FROM_SFP	GENMASK(8, 6)
+ 
+ #define PCS_MODE_CTRL			0x46c
+ #define PCS_MODE_SEL_MASK		GENMASK(12, 8)
+@@ -149,6 +155,8 @@ struct ipq_pcs {
+ 
+ 	struct ipq_pcs_mii *qpcs_mii[PCS_MAX_MII_NRS];
+ 	struct reset_control *xpcs_rstc;
++	/* UNIPHY soft reset in GCC (GCC_UNIPHY*_SYS_RESET), optional */
++	struct reset_control *sys_rstc;
+ };
+ 
+ #define phylink_pcs_to_qpcs_mii(_pcs)	\
+@@ -363,6 +371,39 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	if (ret)
+ 		return ret;
+ 
++	if (xpcs_mode) {
++		/* The vendor SDK sets MISC2 for the XPCS modes as well and
++		 * keeps SFP loss of signal out of the link detection on
++		 * copper PHYs. Mainline only did either for SGMII, so a
++		 * board depended on the bootloader having done it.
++		 */
++		ret = regmap_update_bits(qpcs->regmap, PCS_MISC2,
++					 PCS_MISC2_XPCS_MASK,
++					 PCS_MISC2_XPCS_VAL);
++		if (ret)
++			return ret;
++
++		if (interface != PHY_INTERFACE_MODE_10GBASER) {
++			ret = regmap_clear_bits(qpcs->regmap, PCS_LINK_DETECT,
++						PCS_LINK_DETECT_LOS_FROM_SFP);
++			if (ret)
++				return ret;
++		}
++
++		/* Soft reset the whole UNIPHY with the mode set, as U-Boot
++		 * and SSDK do before calibration. Without it a UNIPHY the
++		 * bootloader never brought up does not send a 10GBASE-R
++		 * stream the PHY can lock to.
++		 */
++		if (qpcs->sys_rstc) {
++			fsleep(100000);
++			reset_control_assert(qpcs->sys_rstc);
++			fsleep(100000);
++			reset_control_deassert(qpcs->sys_rstc);
++			fsleep(100000);
++		}
++	}
++
+ 	/* Wait for calibration completion */
+ 	ret = regmap_read_poll_timeout(qpcs->regmap, PCS_CALIBRATION,
+ 				       val, val & PCS_CALIBRATION_DONE,
+@@ -390,9 +431,21 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	}
+ 
+ 	/* Deassert XPCS */
+-	if (xpcs_mode)
++	if (xpcs_mode) {
+ 		reset_control_deassert(qpcs->xpcs_rstc);
+ 
++		/* Report whether the 10GBASE-R stream from the PHY locks, as
++		 * the vendor SDK waits for it here. Not fatal: the PHY side
++		 * may be configured later.
++		 */
++		ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS, val,
++					       val & XPCS_KR_LINK_STS,
++					       1000, 100000);
++		dev_info(qpcs->dev, "%s: 10GBASE-R from PHY %s (0x%x)\n",
++			 phy_modes(interface),
++			 ret ? "not locked" : "locked", val);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -1034,6 +1087,11 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, PTR_ERR(qpcs->xpcs_rstc),
+ 				     "Failed to get XPCS reset\n");
+ 
++	qpcs->sys_rstc = devm_reset_control_get_optional_exclusive(dev, "sys");
++	if (IS_ERR(qpcs->sys_rstc))
++		return dev_err_probe(dev, PTR_ERR(qpcs->sys_rstc),
++				     "Failed to get UNIPHY sys reset\n");
++
+ 	ret = ipq_pcs_clk_register(qpcs);
+ 	if (ret)
+ 		return ret;

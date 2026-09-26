@@ -1,0 +1,14 @@
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -998,3 +998,11 @@
+ 		line-name = "wifi-5g-rf-select1";
+ 	};
+ };
++
++/* Let the PCS driver soft reset UNIPHY0 the way U-Boot and SSDK do
++ * (patch 0905); boards whose bootloader leaves it down need it. */
++&pcs0 {
++	resets = <&gcc GCC_UNIPHY0_XPCS_RESET>,
++		 <&gcc GCC_UNIPHY0_SYS_RESET>;
++	reset-names = "xpcs", "sys";
++};
