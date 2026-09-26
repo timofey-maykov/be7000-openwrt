@@ -1,1 +1,0 @@
-This is a debug build. LAN ports advertise 10/100/1000 only (no 2.5G), see /etc/init.d/be7000-debug-1g.

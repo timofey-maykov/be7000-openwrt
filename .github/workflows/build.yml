@@ -218,8 +218,8 @@ jobs:
           ! grep -rlE "hfdbg|HFDBG|192\.168\.11\." build_dir/target-*/root-qualcommbe/etc || {
             echo "personal or debug files in the rootfs" >&2; exit 1; }
           case "${{ github.ref_name }}" in
-            debug-*) test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug-1g ;;
-            *) ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug-1g ;;
+            debug-*) test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug ;;
+            *) ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug ;;
           esac
           test -L build_dir/target-*/root-qualcommbe/etc/rc.d/S99be7000-bootconfirm
 
