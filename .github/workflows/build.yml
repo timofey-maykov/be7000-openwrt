@@ -139,6 +139,19 @@ jobs:
             debug-*) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
           esac
           make defconfig
+          # A debug-* build only has to produce the image: nothing it builds
+          # is published to the feed, and packages built as modules (=m) are
+          # never part of the image. Dropping them skips most of "Build
+          # everything". Anything the image needs is =y and stays.
+          # kmod-* stay =m: selected kmods feed the kernel config, so dropping
+          # them would change the kernel hash (vermagic) and the debug image
+          # could no longer install modules from the release feed.
+          case "${{ github.ref_name }}" in
+            debug-*)
+              sed -i '/^CONFIG_PACKAGE_kmod-/!s/^\(CONFIG_PACKAGE_[^=]*\)=m$/# \1 is not set/' .config
+              make defconfig
+              ;;
+          esac
           echo "packages as modules: $(grep -c '=m$' .config)"
 
       # The toolchain and the kernel do not change between runs while the port
