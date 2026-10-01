@@ -1,5 +1,6 @@
-import struct, sys, collections
+import struct, sys, os, collections
 data = open(sys.argv[1], 'rb').read()
+out_dir = os.path.realpath(sys.argv[2])
 PEB = 131072
 vols = collections.defaultdict(dict)
 names = {}
@@ -29,7 +30,9 @@ for off in range(0, len(data) - PEB + 1, PEB):
     vols[vol_id][lnum] = d
 for vid_, lebs in vols.items():
     out = b''.join(lebs[k] for k in sorted(lebs))
-    name = names.get(vid_, str(vid_))
-    fn = f"{sys.argv[2]}/vol_{vid_}_{name}.bin"
+    name = os.path.basename(names.get(vid_, str(vid_)).replace('\\', '/'))
+    fn = os.path.realpath(os.path.join(out_dir, f"vol_{vid_}_{name}.bin"))
+    if os.path.commonpath([fn, out_dir]) != out_dir:
+        raise ValueError(f"Unsafe volume name resolves outside output directory: {name!r}")
     open(fn, 'wb').write(out)
     print(fn, len(out), out[:4])
