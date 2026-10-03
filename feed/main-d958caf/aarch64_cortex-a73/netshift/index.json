@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "architecture": "aarch64_cortex-a73",
+  "packages": {
+    "luci-app-netshift": "0.03102026-r1",
+    "luci-i18n-netshift-ru": "26.275.65112~e57998e",
+    "netshift": "0.9.9-r1"
+  }
+}

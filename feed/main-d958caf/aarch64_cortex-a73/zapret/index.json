@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "architecture": "aarch64_cortex-a73",
+  "packages": {
+    "luci-app-zapret": "72.20260307-r1",
+    "zapret": "72.20260307-r1"
+  }
+}
