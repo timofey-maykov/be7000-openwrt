@@ -2,6 +2,6 @@
   "version": 2,
   "architecture": "aarch64_cortex-a73",
   "packages": {
-    "zapret-manager-beam": "9.90.2.06-r1"
+    "zapret-manager-beam": "9.90.2.06-r3"
   }
 }
