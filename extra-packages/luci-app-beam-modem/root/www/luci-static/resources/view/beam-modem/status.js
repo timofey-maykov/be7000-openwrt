@@ -127,6 +127,8 @@ var REG = {
 
 var LOCK = { 'sim-pin': _('нужен PIN'), 'sim-puk': _('нужен PUK'), 'sim-pin2': _('нужен PIN2'), 'sim-puk2': _('нужен PUK2') };
 
+var CA_STATE = { activated: _('активна'), deactivated: _('не активна'), deconfigured: _('не настроена') };
+
 var TECH = {
 	gsm: 'GSM (2G)', 'gsm-compact': 'GSM', gprs: 'GPRS (2G)', edge: 'EDGE (2G)',
 	umts: 'UMTS (3G)', hsdpa: 'HSDPA (3G)', hsupa: 'HSUPA (3G)', hspa: 'HSPA (3G)', 'hspa-plus': 'HSPA+ (3G)',
@@ -274,7 +276,7 @@ return view.extend({
 				[ _('Диапазон'), f ? 'B' + f.band + (LTE_NAME[f.band] ? ' (' + LTE_NAME[f.band] + _(' МГц') + ')' : '') : null ],
 				[ _('Частота приёма'), f ? f.mhz.toFixed(1) + _(' МГц') : null ],
 				[ 'EARFCN', serving.earfcn ],
-				[ _('Ширина канала'), serving.bandwidth ],
+				[ _('Ширина канала'), st.bandwidth ? st.bandwidth + _(' МГц') : null ],
 				[ 'PCI', serving.physical_ci ],
 				[ 'TAC', serving.tac ],
 				[ _('ID соты'), serving.ci ? serving.ci + (isNaN(ci) ? '' : _(' (eNB %d, сектор %d)').format(ci >> 8, ci & 255)) : null ],
@@ -316,7 +318,9 @@ return view.extend({
 					E('span', {}, _('за 10 минут'))
 				])
 			]),
-			card(_('Сота'), serving ? [ kv(cellInfo) ] : [ E('div', { 'class': 'bm-note' }, _('Модем не сообщает данные о соте.')) ]),
+			card(_('Сота'), serving ? [ kv(cellInfo) ] : [ E('div', { 'class': 'bm-note' }, st.qmicli
+				? _('Модем не сообщает данные о соте ни через ModemManager, ни напрямую.')
+				: _('Через ModemManager модем данные о соте не сообщает. Поставьте пакет qmi-utils, тогда страница спросит модем напрямую: apk add qmi-utils')) ]),
 			card(_('Подключение'), [ kv([
 				[ _('Подключено'), bs.connected == 'yes' ? _('да') : (bs.connected ? _('нет') : null) ],
 				[ 'APN', val(bp.apn) ],
@@ -342,6 +346,23 @@ return view.extend({
 			]) ])
 		]));
 
+		var ca = st.ca || [];
+		if (ca.length > 1 || (ca.length == 1 && !serving))
+			out.push(card(_('Агрегация несущих') + (ca.length > 1 ? ' ' + _('(%d несущих)').format(ca.length) : ''), [ E('table', { 'class': 'bm-table' }, [
+				E('tr', {}, [ E('th', {}, _('Несущая')), E('th', {}, _('Диапазон')), E('th', {}, 'EARFCN'), E('th', {}, _('Частота')), E('th', {}, _('Ширина')), E('th', {}, 'PCI'), E('th', {}, _('Состояние')) ])
+			].concat(ca.map(function(c) {
+				var f = earfcn(c.earfcn), m = /^eutran-(\d+)$/.exec(c.band || '');
+				return E('tr', { 'class': c.primary ? 'serving' : '' }, [
+					E('td', {}, c.primary ? 'PCell' : 'SCell'),
+					E('td', {}, m ? 'B' + m[1] : (f ? 'B' + f.band : val(c.band))),
+					E('td', {}, val(c.earfcn)),
+					E('td', {}, f ? f.mhz.toFixed(1) + _(' МГц') : '—'),
+					E('td', {}, c.bandwidth ? c.bandwidth + _(' МГц') : '—'),
+					E('td', {}, val(c.pci)),
+					E('td', {}, c.primary ? _('основная') : (CA_STATE[c.state] || val(c.state)))
+				]);
+			})))]));
+
 		if (cells.length > 1)
 			out.push(card(_('Соты рядом'), [ E('table', { 'class': 'bm-table' }, [
 				E('tr', {}, [ E('th', {}, _('Тип')), E('th', {}, _('Диапазон')), E('th', {}, 'EARFCN'), E('th', {}, 'PCI'), E('th', {}, 'RSRP'), E('th', {}, 'RSRQ') ])
@@ -355,7 +376,7 @@ return view.extend({
 					E('td', {}, num(c.rsrp) != null ? num(c.rsrp).toFixed(0) : '—'),
 					E('td', {}, num(c.rsrq) != null ? num(c.rsrq).toFixed(0) : '—')
 				]);
-			})))]));
+			}))), E('div', { 'class': 'bm-note' }, st.cells_from == 'qmi' ? _('Данные о сотах получены напрямую от модема (QMI).') : _('Данные о сотах получены от ModemManager.'))]));
 
 		return out;
 	},

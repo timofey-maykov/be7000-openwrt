@@ -123,6 +123,15 @@ msgstr "PIN2 needed"
 msgid "нужен PUK2"
 msgstr "PUK2 needed"
 
+msgid "активна"
+msgstr "active"
+
+msgid "не активна"
+msgstr "inactive"
+
+msgid "не настроена"
+msgstr "not configured"
+
 msgid "любой"
 msgstr "any"
 
@@ -222,8 +231,11 @@ msgstr "last 10 minutes"
 msgid "Сота"
 msgstr "Cell"
 
-msgid "Модем не сообщает данные о соте."
-msgstr "The modem does not report cell data."
+msgid "Модем не сообщает данные о соте ни через ModemManager, ни напрямую."
+msgstr "The modem reports no cell data, neither through ModemManager nor directly."
+
+msgid "Через ModemManager модем данные о соте не сообщает. Поставьте пакет qmi-utils, тогда страница спросит модем напрямую: apk add qmi-utils"
+msgstr "The modem reports no cell data through ModemManager. Install the qmi-utils package and the page will ask the modem directly: apk add qmi-utils"
 
 msgid "Подключение"
 msgstr "Connection"
@@ -282,6 +294,24 @@ msgstr "Lock"
 msgid "попыток: %s"
 msgstr "attempts: %s"
 
+msgid "Агрегация несущих"
+msgstr "Carrier aggregation"
+
+msgid "(%d несущих)"
+msgstr "(%d carriers)"
+
+msgid "Несущая"
+msgstr "Carrier"
+
+msgid "Частота"
+msgstr "Frequency"
+
+msgid "Ширина"
+msgstr "Width"
+
+msgid "основная"
+msgstr "primary"
+
 msgid "Соты рядом"
 msgstr "Nearby cells"
 
@@ -290,6 +320,12 @@ msgstr "Type"
 
 msgid ", текущая"
 msgstr ", serving"
+
+msgid "Данные о сотах получены напрямую от модема (QMI)."
+msgstr "Cell data comes directly from the modem (QMI)."
+
+msgid "Данные о сотах получены от ModemManager."
+msgstr "Cell data comes from ModemManager."
 
 msgid "Настройки модема"
 msgstr "Modem settings"

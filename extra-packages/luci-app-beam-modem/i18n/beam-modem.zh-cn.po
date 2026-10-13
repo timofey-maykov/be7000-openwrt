@@ -123,6 +123,15 @@ msgstr "需要 PIN2"
 msgid "нужен PUK2"
 msgstr "需要 PUK2"
 
+msgid "активна"
+msgstr "已激活"
+
+msgid "не активна"
+msgstr "未激活"
+
+msgid "не настроена"
+msgstr "未配置"
+
 msgid "любой"
 msgstr "任意"
 
@@ -222,8 +231,11 @@ msgstr "最近 10 分钟"
 msgid "Сота"
 msgstr "小区"
 
-msgid "Модем не сообщает данные о соте."
-msgstr "调制解调器未提供小区数据。"
+msgid "Модем не сообщает данные о соте ни через ModemManager, ни напрямую."
+msgstr "调制解调器既未通过 ModemManager 也未直接提供小区数据。"
+
+msgid "Через ModemManager модем данные о соте не сообщает. Поставьте пакет qmi-utils, тогда страница спросит модем напрямую: apk add qmi-utils"
+msgstr "调制解调器未通过 ModemManager 提供小区数据。安装 qmi-utils 软件包后，本页面会直接向调制解调器查询：apk add qmi-utils"
 
 msgid "Подключение"
 msgstr "连接"
@@ -282,6 +294,24 @@ msgstr "锁定"
 msgid "попыток: %s"
 msgstr "剩余次数：%s"
 
+msgid "Агрегация несущих"
+msgstr "载波聚合"
+
+msgid "(%d несущих)"
+msgstr "（%d 个载波）"
+
+msgid "Несущая"
+msgstr "载波"
+
+msgid "Частота"
+msgstr "频率"
+
+msgid "Ширина"
+msgstr "带宽"
+
+msgid "основная"
+msgstr "主载波"
+
 msgid "Соты рядом"
 msgstr "附近小区"
 
@@ -290,6 +320,12 @@ msgstr "类型"
 
 msgid ", текущая"
 msgstr "，当前"
+
+msgid "Данные о сотах получены напрямую от модема (QMI)."
+msgstr "小区数据直接来自调制解调器（QMI）。"
+
+msgid "Данные о сотах получены от ModemManager."
+msgstr "小区数据来自 ModemManager。"
 
 msgid "Настройки модема"
 msgstr "调制解调器设置"

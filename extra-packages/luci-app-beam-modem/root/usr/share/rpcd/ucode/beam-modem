@@ -44,6 +44,101 @@ function cell(s) {
 	return c;
 }
 
+// Modems that do not report cells through ModemManager (many MBIM ones)
+// still answer Qualcomm NAS requests. qmicli talks to them through the
+// same proxy as ModemManager, so the two do not get in each other's way.
+const QMICLI = '/usr/bin/qmicli';
+
+function hex(v) {
+	return v == null ? null : sprintf('%X', +v);
+}
+
+function qmi(port, mbim, req) {
+	let fd = popen(`${QMICLI} -p -d /dev/${port}${mbim ? ' --device-open-mbim' : ''} ${req} 2>/dev/null`, 'r');
+	let out = fd ? (fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return rc == 0 ? out : null;
+}
+
+function bw(v) {
+	return v && v != 'invalid' && v != 'unknown' ? replace(v, '-', '.') : null;
+}
+
+// --nas-get-cell-location-info: the serving LTE cell, its neighbours on the
+// same channel and the cells on other channels
+function qmi_cells(txt) {
+	let cells = [], sec = null, srv = {}, freq = null, cur = null, ta = null, m;
+	for (let l in split(txt, '\n')) {
+		if (l == 'Intrafrequency LTE Info') { sec = 'intra'; continue; }
+		if (l == 'Interfrequency LTE Info') { sec = 'inter'; continue; }
+		if ((m = match(l, /^LTE Timing Advance: '([0-9]+)'/))) { ta = m[1]; continue; }
+		if (match(l, /^[^\t]/)) { sec = null; continue; }
+		if (sec == 'intra') {
+			if ((m = match(l, /^\tPLMN: '([0-9]+)'/))) srv.plmn = m[1];
+			else if ((m = match(l, /^\tTracking Area Code: '([0-9]+)'/))) srv.tac = m[1];
+			else if ((m = match(l, /^\tGlobal Cell ID: '([0-9]+)'/))) srv.gci = m[1];
+			else if ((m = match(l, /^\tEUTRA Absolute RF Channel Number: '([0-9]+)'/))) srv.earfcn = m[1];
+			else if ((m = match(l, /^\tServing Cell ID: '([0-9]+)'/))) srv.pci = m[1];
+			else if (match(l, /^\tCell \[/)) push(cells, cur = { cell_type: 'lte', serving: 'no', earfcn: srv.earfcn });
+		}
+		else if (sec == 'inter') {
+			if ((m = match(l, /^\t\tEUTRA Absolute RF Channel Number: '([0-9]+)'/))) freq = m[1];
+			else if (match(l, /^\t\tCell \[/)) push(cells, cur = { cell_type: 'lte', serving: 'no', earfcn: freq });
+		}
+		if (!sec || !cur)
+			continue;
+		if ((m = match(l, /^\t+Physical Cell ID: '([0-9]+)'/))) cur.physical_ci = m[1];
+		else if ((m = match(l, /^\t+RSRQ: '([-0-9.]+)'/))) cur.rsrq = m[1];
+		else if ((m = match(l, /^\t+RSRP: '([-0-9.]+)'/))) cur.rsrp = m[1];
+		else if ((m = match(l, /^\t+RSSI: '([-0-9.]+)'/))) cur.rssi = m[1];
+	}
+	let serving = null;
+	for (let c in cells)
+		if (!serving && c.earfcn == srv.earfcn && c.physical_ci == srv.pci)
+			serving = c;
+	if (!serving && srv.earfcn != null)
+		unshift(cells, serving = { cell_type: 'lte', earfcn: srv.earfcn, physical_ci: srv.pci });
+	if (serving) {
+		serving.serving = 'yes';
+		serving.operator_id = srv.plmn;
+		serving.tac = hex(srv.tac);
+		serving.ci = hex(srv.gci);
+		serving.timing_advance = ta;
+	}
+	return cells;
+}
+
+// --nas-get-lte-cphy-ca-info: the primary and the secondary carriers
+function qmi_ca(txt) {
+	let ca = [], cur = null, m;
+	for (let l in split(txt, '\n')) {
+		if (l == 'Primary Cell Info') push(ca, cur = { primary: true });
+		else if (match(l, /^Secondary Cell( [0-9]+)? Info/)) push(ca, cur = { primary: false });
+		else if (match(l, /^[^\t]/)) cur = null;
+		else if (cur) {
+			if ((m = match(l, /^\tPhysical Cell ID: '([0-9]+)'/))) cur.pci = m[1];
+			else if ((m = match(l, /^\tRX Channel: '([0-9]+)'/))) cur.earfcn = m[1];
+			else if ((m = match(l, /^\tDL Bandwidth: '([^']*)'/))) cur.bandwidth = bw(m[1]);
+			else if ((m = match(l, /^\tLTE Band: '([^']*)'/))) cur.band = m[1];
+			else if ((m = match(l, /^\tState: '([^']*)'/))) cur.state = m[1];
+		}
+	}
+	return filter(ca, c => c.earfcn != null);
+}
+
+// --nas-get-rf-band-info: the channel width of the current LTE carrier
+function qmi_bw(txt) {
+	let sec = null, iface = null, m;
+	for (let l in split(txt, '\n')) {
+		if (match(l, /^Bandwidth:/)) { sec = 'bw'; continue; }
+		if (match(l, /^[^\t]/)) { sec = null; continue; }
+		if (sec != 'bw') continue;
+		if ((m = match(l, /Radio Interface: +'([^']*)'/))) iface = m[1];
+		else if ((m = match(l, /Bandwidth: +'([^']*)'/)) && iface == 'lte') return bw(m[1]);
+	}
+	return null;
+}
+
 function valid(s, re) {
 	return type(s) == 'string' && length(s) > 0 && length(s) < 400 && match(s, re);
 }
@@ -77,8 +172,34 @@ return {
 					res.signal = sig;
 
 					let ci = mm(`-m ${id} --get-cell-info`)?.modem?.generic?.['cell-info'];
-					if (type(ci) == 'array')
+					if (type(ci) == 'array' && length(ci)) {
 						res.cells = map(ci, cell);
+						res.cells_from = 'mm';
+					}
+
+					// the control port: "cdc-wdm0 (mbim)" or "cdc-wdm0 (qmi)"
+					let port = null, mbim = false;
+					for (let p in g.ports ?? []) {
+						let pm = match(p, /^(cdc-wdm[0-9]+) \((mbim|qmi)\)$/);
+						if (pm) { port = pm[1]; mbim = pm[2] == 'mbim'; break; }
+					}
+					res.qmicli = access(QMICLI, 'x') ? true : false;
+					if (port && res.qmicli) {
+						if (!res.cells) {
+							let t = qmi(port, mbim, '--nas-get-cell-location-info');
+							let c = t ? qmi_cells(t) : [];
+							if (length(c)) {
+								res.cells = c;
+								res.cells_from = 'qmi';
+							}
+						}
+						let t = qmi(port, mbim, '--nas-get-lte-cphy-ca-info');
+						if (t)
+							res.ca = qmi_ca(t);
+						t = qmi(port, mbim, '--nas-get-rf-band-info');
+						if (t)
+							res.bandwidth = qmi_bw(t);
+					}
 				}
 
 				let sim = tail(g.sim);
