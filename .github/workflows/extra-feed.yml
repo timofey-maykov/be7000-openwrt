@@ -1,0 +1,95 @@
+name: extra feed
+
+# Packages that need no compiler (extra-packages/*: LuCI pages, scripts) go to
+# feed/extra/aarch64_cortex-a73 on gh-pages within a minute of a push, without
+# waiting for an image build. Packed with apk mkpkg as noarch and signed with
+# the same key as the main feed.
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ "extra-packages/**", ".github/workflows/extra-feed.yml" ]
+  workflow_dispatch:
+
+concurrency:
+  group: extra-feed
+  cancel-in-progress: false
+
+env:
+  DIR: feed/extra/aarch64_cortex-a73
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the packages
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          [ -n "$APK_SIGNING_KEY" ] || { echo "APK_SIGNING_KEY secret is not set" >&2; exit 1; }
+          umask 077
+          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
+          umask 022
+          mkdir -p out
+          cat > "$RUNNER_TEMP/pack.sh" <<'EOF'
+          set -e
+          apk add -q apk-tools openssl >/dev/null
+          for d in /src/*/; do
+            [ -f "$d/PKG" ] || continue
+            get() { sed -n "s/^$1=//p" "$d/PKG"; }
+            name=$(get name); ver=$(get version)
+            rm -rf /tmp/root && cp -a "$d/root" /tmp/root && chown -R 0:0 /tmp/root
+            set -- --info "name:$name" --info "version:$ver" --info "description:$(get description)" \
+              --info "arch:noarch" --info "license:$(get license)" --info "origin:$name" \
+              --info "maintainer:Timofey Maykov <itnitro@gmail.com>"
+            [ -n "$(get depends)" ] && set -- "$@" --info "depends:$(get depends)"
+            for s in post-install post-upgrade pre-deinstall; do
+              [ -f "$d/$s" ] && set -- "$@" --script "$s:$d/$s"
+            done
+            apk mkpkg --sign-key /key.pem "$@" --files /tmp/root --output "/out/$name-$ver.apk"
+            echo "built $name-$ver"
+          done
+          mkdir -p /tmp/keys
+          openssl ec -in /key.pem -pubout -out /tmp/keys/feed.pem 2>/dev/null
+          apk verify --keys-dir /tmp/keys /out/*.apk
+          cd /out && apk mkndx --allow-untrusted --sign-key /key.pem --output packages.adb *.apk
+          EOF
+          docker run --rm \
+            -v "$PWD/extra-packages:/src:ro" \
+            -v "$PWD/out:/out" \
+            -v "$RUNNER_TEMP/key.pem:/key.pem:ro" \
+            -v "$RUNNER_TEMP/pack.sh:/pack.sh:ro" \
+            alpine:edge sh /pack.sh
+          rm -f "$RUNNER_TEMP/key.pem"
+          ls -la out
+
+      - name: Publish
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
+          cd pages
+          git sparse-checkout set --no-cone "/$DIR/"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # the main feed build may push at the same time: on a refused push
+          # start again from the fresh tip, the directory is ours alone
+          for i in 1 2 3 4 5; do
+            git fetch -q --filter=blob:none --depth 1 origin gh-pages
+            git checkout -q -B gh-pages FETCH_HEAD
+            rm -rf "$DIR"
+            mkdir -p "$DIR"
+            cp ../out/* "$DIR/"
+            git add -A "$DIR"
+            if git diff --cached --quiet; then
+              echo "feed unchanged"
+              exit 0
+            fi
+            git commit -q -m "feed: extra packages for aarch64_cortex-a73"
+            git push -q origin gh-pages && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

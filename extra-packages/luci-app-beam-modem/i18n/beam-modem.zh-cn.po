@@ -1,0 +1,329 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh-cn\n"
+
+msgid "Б"
+msgstr "B"
+
+msgid "КБ"
+msgstr "KB"
+
+msgid "МБ"
+msgstr "MB"
+
+msgid "ГБ"
+msgstr "GB"
+
+msgid "ТБ"
+msgstr "TB"
+
+msgid " д "
+msgstr " 天 "
+
+msgid " ч "
+msgstr " 小时 "
+
+msgid " мин"
+msgstr " 分钟"
+
+msgid "плохо"
+msgstr "差"
+
+msgid "средне"
+msgstr "一般"
+
+msgid "хорошо"
+msgstr "良好"
+
+msgid "отлично"
+msgstr "极好"
+
+msgid "ошибка"
+msgstr "故障"
+
+msgid "неизвестно"
+msgstr "未知"
+
+msgid "запускается"
+msgstr "正在启动"
+
+msgid "заблокирован, нужен PIN"
+msgstr "已锁定，需要 PIN"
+
+msgid "выключен"
+msgstr "已禁用"
+
+msgid "выключается"
+msgstr "正在禁用"
+
+msgid "включается"
+msgstr "正在启用"
+
+msgid "включён, сети нет"
+msgstr "已启用，无网络"
+
+msgid "ищет сеть"
+msgstr "正在搜索网络"
+
+msgid "в сети, не подключён"
+msgstr "已注册，未连接"
+
+msgid "отключается"
+msgstr "正在断开"
+
+msgid "подключается"
+msgstr "正在连接"
+
+msgid "подключён"
+msgstr "已连接"
+
+msgid "включено"
+msgstr "开启"
+
+msgid "выключено (режим низкого потребления)"
+msgstr "关闭（低功耗模式）"
+
+msgid "выключено"
+msgstr "关闭"
+
+msgid "не зарегистрирован"
+msgstr "未注册"
+
+msgid "домашняя сеть"
+msgstr "本地网络"
+
+msgid "поиск сети"
+msgstr "正在搜索"
+
+msgid "в регистрации отказано"
+msgstr "注册被拒绝"
+
+msgid "роуминг"
+msgstr "漫游"
+
+msgid "домашняя сеть, только SMS"
+msgstr "本地网络，仅短信"
+
+msgid "роуминг, только SMS"
+msgstr "漫游，仅短信"
+
+msgid "только экстренные вызовы"
+msgstr "仅紧急呼叫"
+
+msgid "нужен PIN"
+msgstr "需要 PIN"
+
+msgid "нужен PUK"
+msgstr "需要 PUK"
+
+msgid "нужен PIN2"
+msgstr "需要 PIN2"
+
+msgid "нужен PUK2"
+msgstr "需要 PUK2"
+
+msgid "любой"
+msgstr "任意"
+
+msgid "нет"
+msgstr "否"
+
+msgid "%s, предпочтительно %s"
+msgstr "%s，首选 %s"
+
+msgid "Не удалось применить"
+msgstr "无法应用"
+
+msgid "Применено. Модему может понадобиться до минуты, чтобы снова найти сеть."
+msgstr "已应用。调制解调器可能需要最多一分钟重新找到网络。"
+
+msgid "ModemManager не установлен. Поставьте пакет modemmanager."
+msgstr "未安装 ModemManager。请安装 modemmanager 软件包。"
+
+msgid "ModemManager не видит модем."
+msgstr "ModemManager 未发现调制解调器。"
+
+msgid "Проверьте, что модем определился (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). Если драйверы загрузились, а модема нет, перезапустите ModemManager командой /etc/init.d/modemmanager restart или перезагрузите роутер."
+msgstr "请检查调制解调器是否已被识别（dmesg、ls /dev/cdc-wdm* /dev/ttyUSB*）。如果驱动已加载但没有调制解调器，请用 /etc/init.d/modemmanager restart 重启 ModemManager，或重启路由器。"
+
+msgid "Нет ответа от службы beam-modem. Перезапустите rpcd: /etc/init.d/rpcd restart."
+msgstr "beam-modem 服务无响应。请重启 rpcd：/etc/init.d/rpcd restart。"
+
+msgid "Радио модема выключено (режим низкого потребления). Так бывает, если модем выключен в ModemManager или ему нужна разблокировка FCC."
+msgstr "调制解调器射频已关闭（低功耗模式）。这通常是因为调制解调器在 ModemManager 中被禁用，或需要 FCC 解锁。"
+
+msgid "Включить модем"
+msgstr "启用调制解调器"
+
+msgid "Диапазон"
+msgstr "频段"
+
+msgid " МГц"
+msgstr " MHz"
+
+msgid "Частота приёма"
+msgstr "下行频率"
+
+msgid "Ширина канала"
+msgstr "带宽"
+
+msgid "ID соты"
+msgstr "小区 ID"
+
+msgid " (eNB %d, сектор %d)"
+msgstr "（eNB %d，扇区 %d）"
+
+msgid "Оператор соты"
+msgstr "小区运营商"
+
+msgid "Сеть"
+msgstr "网络"
+
+msgid "Состояние"
+msgstr "状态"
+
+msgid "Технология"
+msgstr "技术"
+
+msgid "Регистрация"
+msgstr "注册"
+
+msgid "Код оператора"
+msgstr "运营商代码"
+
+msgid "Уровень сигнала"
+msgstr "信号质量"
+
+msgid "Радио"
+msgstr "射频"
+
+msgid "Режим"
+msgstr "模式"
+
+msgid "Сигнал"
+msgstr "信号"
+
+msgid "дБм"
+msgstr "dBm"
+
+msgid "дБ"
+msgstr "dB"
+
+msgid "RSRP, от −120 до −60"
+msgstr "RSRP，−120 至 −60"
+
+msgid "SINR, от −10 до 30"
+msgstr "SINR，−10 至 30"
+
+msgid "за 10 минут"
+msgstr "最近 10 分钟"
+
+msgid "Сота"
+msgstr "小区"
+
+msgid "Модем не сообщает данные о соте."
+msgstr "调制解调器未提供小区数据。"
+
+msgid "Подключение"
+msgstr "连接"
+
+msgid "Подключено"
+msgstr "已连接"
+
+msgid "да"
+msgstr "是"
+
+msgid "Интерфейс"
+msgstr "接口"
+
+msgid "Адрес"
+msgstr "地址"
+
+msgid "Шлюз"
+msgstr "网关"
+
+msgid "Время подключения"
+msgstr "连接时长"
+
+msgid "Принято"
+msgstr "已接收"
+
+msgid "Отправлено"
+msgstr "已发送"
+
+msgid "Подключения нет. Его создаёт интерфейс с протоколом ModemManager на странице Сеть, Интерфейсы."
+msgstr "没有连接。连接由 网络 → 接口 页面中使用 ModemManager 协议的接口建立。"
+
+msgid "Модем и SIM"
+msgstr "调制解调器和 SIM"
+
+msgid "Модель"
+msgstr "型号"
+
+msgid "Прошивка"
+msgstr "固件"
+
+msgid "Драйверы"
+msgstr "驱动"
+
+msgid "Порт"
+msgstr "端口"
+
+msgid "Оператор SIM"
+msgstr "SIM 运营商"
+
+msgid "Номер"
+msgstr "号码"
+
+msgid "Блокировка"
+msgstr "锁定"
+
+msgid "попыток: %s"
+msgstr "剩余次数：%s"
+
+msgid "Соты рядом"
+msgstr "附近小区"
+
+msgid "Тип"
+msgstr "类型"
+
+msgid ", текущая"
+msgstr "，当前"
+
+msgid "Настройки модема"
+msgstr "调制解调器设置"
+
+msgid "Изменения применяются сразу и сохраняются в модеме. На время переключения связь пропадает."
+msgstr "更改立即生效并保存在调制解调器中。切换期间连接会中断。"
+
+msgid "Режим сети"
+msgstr "网络模式"
+
+msgid "Применить режим"
+msgstr "应用模式"
+
+msgid "Диапазоны"
+msgstr "频段"
+
+msgid "Все"
+msgstr "全部"
+
+msgid "Только LTE"
+msgstr "仅 LTE"
+
+msgid "Снять все"
+msgstr "全部取消"
+
+msgid "Выберите хотя бы один диапазон."
+msgstr "请至少选择一个频段。"
+
+msgid "Применить диапазоны"
+msgstr "应用频段"
+
+msgid "Модем"
+msgstr "调制解调器"
+
+msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
+msgstr "ModemManager 提供的调制解调器信息，每 5 秒刷新一次。"
+

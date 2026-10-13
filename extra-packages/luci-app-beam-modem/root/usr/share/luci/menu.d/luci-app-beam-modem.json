@@ -1,0 +1,13 @@
+{
+	"admin/status/modem": {
+		"title": "Модем",
+		"order": 45,
+		"action": {
+			"type": "view",
+			"path": "beam-modem/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-beam-modem" ]
+		}
+	}
+}

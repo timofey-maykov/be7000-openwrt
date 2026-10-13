@@ -1,0 +1,135 @@
+'use strict';
+
+// Status, Modem: everything ModemManager knows about the first modem, and
+// the mode and band settings. Only mmcli is used, the AT ports stay with
+// ModemManager.
+
+import { popen, access } from 'fs';
+
+const MMCLI = '/usr/bin/mmcli --timeout=15';
+
+function run(args) {
+	let fd = popen(`${MMCLI} ${args} 2>&1`, 'r');
+	let out = fd ? (fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out: trim(out) };
+}
+
+function mm(args) {
+	let r = run(`${args} -J`);
+	if (r.rc != 0)
+		return null;
+	try { return json(r.out); } catch (e) { return null; }
+}
+
+function tail(path) {
+	let m = match(path ?? '', /\/([0-9]+)$/);
+	return m ? m[1] : null;
+}
+
+function first_modem() {
+	let l = mm('-L');
+	let list = l?.['modem-list'] ?? [];
+	return length(list) ? tail(list[0]) : null;
+}
+
+// "cell type: lte, serving: yes, earfcn: 1300, rsrp: -95.000000"
+function cell(s) {
+	let c = {};
+	for (let part in split(s, ', ')) {
+		let i = index(part, ': ');
+		if (i > 0)
+			c[replace(substr(part, 0, i), ' ', '_')] = substr(part, i + 2);
+	}
+	return c;
+}
+
+function valid(s, re) {
+	return type(s) == 'string' && length(s) > 0 && length(s) < 400 && match(s, re);
+}
+
+return {
+	'beam-modem': {
+		status: {
+			call: function() {
+				if (!access('/usr/bin/mmcli', 'x'))
+					return { error: 'no-mmcli' };
+				let id = first_modem();
+				if (id == null)
+					return { error: 'no-modem' };
+
+				let res = { id: +id };
+				res.modem = mm(`-m ${id}`)?.modem;
+				if (!res.modem)
+					return { error: 'no-modem' };
+
+				let g = res.modem.generic ?? {};
+				let st = g.state ?? '';
+				let ready = !(st in [ 'failed', 'unknown', 'initializing', 'locked', 'disabled', 'disabling' ]);
+
+				if (ready) {
+					let sig = mm(`-m ${id} --signal-get`)?.modem?.signal;
+					// detailed values come only after a refresh rate is set
+					if (sig && +(sig.refresh?.rate ?? 0) == 0) {
+						run(`-m ${id} --signal-setup=5`);
+						sig = mm(`-m ${id} --signal-get`)?.modem?.signal;
+					}
+					res.signal = sig;
+
+					let ci = mm(`-m ${id} --get-cell-info`)?.modem?.generic?.['cell-info'];
+					if (type(ci) == 'array')
+						res.cells = map(ci, cell);
+				}
+
+				let sim = tail(g.sim);
+				if (sim != null)
+					res.sim = mm(`-i ${sim}`)?.sim;
+
+				let b = tail((g.bearers ?? [])[0]);
+				if (b != null)
+					res.bearer = mm(`-b ${b}`)?.bearer;
+
+				return res;
+			}
+		},
+
+		set_modes: {
+			args: { allowed: 'allowed', preferred: 'preferred' },
+			call: function(req) {
+				let id = first_modem();
+				let a = req.args?.allowed, p = req.args?.preferred;
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				if (!valid(a, /^[a-z0-9|]+$/) || (p && !valid(p, /^[a-z0-9]+$/)))
+					return { ok: false, output: 'bad mode' };
+				let r = run(`-m ${id} --set-allowed-modes='${a}'` + (p && p != 'none' ? ` --set-preferred-mode='${p}'` : ''));
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		set_bands: {
+			args: { bands: 'bands' },
+			call: function(req) {
+				let id = first_modem();
+				let b = req.args?.bands;
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				if (!valid(b, /^[a-z0-9|-]+$/))
+					return { ok: false, output: 'bad bands' };
+				let r = run(`-m ${id} --set-current-bands='${b}'`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		enable: {
+			args: { on: true },
+			call: function(req) {
+				let id = first_modem();
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				let r = run(`-m ${id} ${req.args?.on ? '-e' : '-d'}`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		}
+	}
+};

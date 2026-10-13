@@ -1,0 +1,15 @@
+{
+	"luci-app-beam-modem": {
+		"description": "Modem status and settings through ModemManager",
+		"read": {
+			"ubus": {
+				"beam-modem": [ "status" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"beam-modem": [ "set_modes", "set_bands", "enable" ]
+			}
+		}
+	}
+}

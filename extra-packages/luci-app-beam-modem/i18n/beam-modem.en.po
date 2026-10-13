@@ -1,0 +1,329 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "Б"
+msgstr "B"
+
+msgid "КБ"
+msgstr "KB"
+
+msgid "МБ"
+msgstr "MB"
+
+msgid "ГБ"
+msgstr "GB"
+
+msgid "ТБ"
+msgstr "TB"
+
+msgid " д "
+msgstr " d "
+
+msgid " ч "
+msgstr " h "
+
+msgid " мин"
+msgstr " min"
+
+msgid "плохо"
+msgstr "poor"
+
+msgid "средне"
+msgstr "fair"
+
+msgid "хорошо"
+msgstr "good"
+
+msgid "отлично"
+msgstr "excellent"
+
+msgid "ошибка"
+msgstr "failed"
+
+msgid "неизвестно"
+msgstr "unknown"
+
+msgid "запускается"
+msgstr "starting"
+
+msgid "заблокирован, нужен PIN"
+msgstr "locked, PIN needed"
+
+msgid "выключен"
+msgstr "disabled"
+
+msgid "выключается"
+msgstr "disabling"
+
+msgid "включается"
+msgstr "enabling"
+
+msgid "включён, сети нет"
+msgstr "enabled, no network"
+
+msgid "ищет сеть"
+msgstr "searching"
+
+msgid "в сети, не подключён"
+msgstr "registered, not connected"
+
+msgid "отключается"
+msgstr "disconnecting"
+
+msgid "подключается"
+msgstr "connecting"
+
+msgid "подключён"
+msgstr "connected"
+
+msgid "включено"
+msgstr "on"
+
+msgid "выключено (режим низкого потребления)"
+msgstr "off (low power mode)"
+
+msgid "выключено"
+msgstr "off"
+
+msgid "не зарегистрирован"
+msgstr "not registered"
+
+msgid "домашняя сеть"
+msgstr "home network"
+
+msgid "поиск сети"
+msgstr "searching"
+
+msgid "в регистрации отказано"
+msgstr "registration denied"
+
+msgid "роуминг"
+msgstr "roaming"
+
+msgid "домашняя сеть, только SMS"
+msgstr "home network, SMS only"
+
+msgid "роуминг, только SMS"
+msgstr "roaming, SMS only"
+
+msgid "только экстренные вызовы"
+msgstr "emergency calls only"
+
+msgid "нужен PIN"
+msgstr "PIN needed"
+
+msgid "нужен PUK"
+msgstr "PUK needed"
+
+msgid "нужен PIN2"
+msgstr "PIN2 needed"
+
+msgid "нужен PUK2"
+msgstr "PUK2 needed"
+
+msgid "любой"
+msgstr "any"
+
+msgid "нет"
+msgstr "no"
+
+msgid "%s, предпочтительно %s"
+msgstr "%s, %s preferred"
+
+msgid "Не удалось применить"
+msgstr "Could not apply"
+
+msgid "Применено. Модему может понадобиться до минуты, чтобы снова найти сеть."
+msgstr "Applied. The modem may need up to a minute to find the network again."
+
+msgid "ModemManager не установлен. Поставьте пакет modemmanager."
+msgstr "ModemManager is not installed. Install the modemmanager package."
+
+msgid "ModemManager не видит модем."
+msgstr "ModemManager does not see a modem."
+
+msgid "Проверьте, что модем определился (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). Если драйверы загрузились, а модема нет, перезапустите ModemManager командой /etc/init.d/modemmanager restart или перезагрузите роутер."
+msgstr "Check that the modem was detected (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). If the drivers are loaded but there is no modem, restart ModemManager with /etc/init.d/modemmanager restart or reboot the router."
+
+msgid "Нет ответа от службы beam-modem. Перезапустите rpcd: /etc/init.d/rpcd restart."
+msgstr "No answer from the beam-modem service. Restart rpcd: /etc/init.d/rpcd restart."
+
+msgid "Радио модема выключено (режим низкого потребления). Так бывает, если модем выключен в ModemManager или ему нужна разблокировка FCC."
+msgstr "The modem radio is off (low power mode). This happens when the modem is disabled in ModemManager or needs an FCC unlock."
+
+msgid "Включить модем"
+msgstr "Enable the modem"
+
+msgid "Диапазон"
+msgstr "Band"
+
+msgid " МГц"
+msgstr " MHz"
+
+msgid "Частота приёма"
+msgstr "Downlink frequency"
+
+msgid "Ширина канала"
+msgstr "Bandwidth"
+
+msgid "ID соты"
+msgstr "Cell ID"
+
+msgid " (eNB %d, сектор %d)"
+msgstr " (eNB %d, sector %d)"
+
+msgid "Оператор соты"
+msgstr "Cell operator"
+
+msgid "Сеть"
+msgstr "Network"
+
+msgid "Состояние"
+msgstr "State"
+
+msgid "Технология"
+msgstr "Technology"
+
+msgid "Регистрация"
+msgstr "Registration"
+
+msgid "Код оператора"
+msgstr "Operator code"
+
+msgid "Уровень сигнала"
+msgstr "Signal quality"
+
+msgid "Радио"
+msgstr "Radio"
+
+msgid "Режим"
+msgstr "Mode"
+
+msgid "Сигнал"
+msgstr "Signal"
+
+msgid "дБм"
+msgstr "dBm"
+
+msgid "дБ"
+msgstr "dB"
+
+msgid "RSRP, от −120 до −60"
+msgstr "RSRP, −120 to −60"
+
+msgid "SINR, от −10 до 30"
+msgstr "SINR, −10 to 30"
+
+msgid "за 10 минут"
+msgstr "last 10 minutes"
+
+msgid "Сота"
+msgstr "Cell"
+
+msgid "Модем не сообщает данные о соте."
+msgstr "The modem does not report cell data."
+
+msgid "Подключение"
+msgstr "Connection"
+
+msgid "Подключено"
+msgstr "Connected"
+
+msgid "да"
+msgstr "yes"
+
+msgid "Интерфейс"
+msgstr "Interface"
+
+msgid "Адрес"
+msgstr "Address"
+
+msgid "Шлюз"
+msgstr "Gateway"
+
+msgid "Время подключения"
+msgstr "Connected for"
+
+msgid "Принято"
+msgstr "Received"
+
+msgid "Отправлено"
+msgstr "Sent"
+
+msgid "Подключения нет. Его создаёт интерфейс с протоколом ModemManager на странице Сеть, Интерфейсы."
+msgstr "No connection. It is made by an interface with the ModemManager protocol on the Network, Interfaces page."
+
+msgid "Модем и SIM"
+msgstr "Modem and SIM"
+
+msgid "Модель"
+msgstr "Model"
+
+msgid "Прошивка"
+msgstr "Firmware"
+
+msgid "Драйверы"
+msgstr "Drivers"
+
+msgid "Порт"
+msgstr "Port"
+
+msgid "Оператор SIM"
+msgstr "SIM operator"
+
+msgid "Номер"
+msgstr "Number"
+
+msgid "Блокировка"
+msgstr "Lock"
+
+msgid "попыток: %s"
+msgstr "attempts: %s"
+
+msgid "Соты рядом"
+msgstr "Nearby cells"
+
+msgid "Тип"
+msgstr "Type"
+
+msgid ", текущая"
+msgstr ", serving"
+
+msgid "Настройки модема"
+msgstr "Modem settings"
+
+msgid "Изменения применяются сразу и сохраняются в модеме. На время переключения связь пропадает."
+msgstr "Changes apply at once and are stored in the modem. The connection drops while it switches."
+
+msgid "Режим сети"
+msgstr "Network mode"
+
+msgid "Применить режим"
+msgstr "Apply mode"
+
+msgid "Диапазоны"
+msgstr "Bands"
+
+msgid "Все"
+msgstr "All"
+
+msgid "Только LTE"
+msgstr "LTE only"
+
+msgid "Снять все"
+msgstr "Clear all"
+
+msgid "Выберите хотя бы один диапазон."
+msgstr "Select at least one band."
+
+msgid "Применить диапазоны"
+msgstr "Apply bands"
+
+msgid "Модем"
+msgstr "Modem"
+
+msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
+msgstr "What ModemManager knows about the modem, refreshed every 5 seconds."
+
