@@ -1,5 +1,5 @@
 name=luci-app-beam-modem
-version=1.1.0-r1
-description=LuCI page Status, Modem: signal, cell, band and frequency, connection and SIM of a ModemManager modem, with mode and band selection
-depends=modemmanager rpcd-mod-ucode luci-base
+version=1.2.0-r1
+description=LuCI Status, Modem: signal, cells, carrier aggregation, connection and SIM of a ModemManager modem, mode and band selection, and an AT command console
+depends=modemmanager rpcd-mod-ucode luci-base socat
 license=Apache-2.0

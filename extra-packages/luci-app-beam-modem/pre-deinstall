@@ -1,0 +1,5 @@
+#!/bin/sh
+[ -n "$IPKG_INSTROOT" ] && exit 0
+# a running AT session would leave ModemManager stopped
+[ -f /var/run/beam-modem-console/active ] && /usr/libexec/beam-modem-console stop >/dev/null 2>&1
+exit 0

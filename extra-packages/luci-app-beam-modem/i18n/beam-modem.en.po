@@ -363,3 +363,153 @@ msgstr "Modem"
 msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
 msgstr "What ModemManager knows about the modem, refreshed every 5 seconds."
 
+msgid "модель и прошивка"
+msgstr "model and firmware"
+
+msgid "версия прошивки"
+msgstr "firmware version"
+
+msgid "состояние SIM"
+msgstr "SIM state"
+
+msgid "режим радио"
+msgstr "radio mode"
+
+msgid "уровень сигнала"
+msgstr "signal level"
+
+msgid "оператор"
+msgstr "operator"
+
+msgid "регистрация LTE"
+msgstr "LTE registration"
+
+msgid "профили APN"
+msgstr "APN profiles"
+
+msgid "поиск сетей, до 3 минут"
+msgstr "network scan, up to 3 minutes"
+
+msgid "Поддерживает ли модем привязку к соте"
+msgstr "Does the modem support cell lock"
+
+msgid "заводской режим"
+msgstr "factory test mode"
+
+msgid "Нет ответа от службы beam-modem"
+msgstr "No answer from the beam-modem service"
+
+msgid "Перезапустите rpcd: /etc/init.d/rpcd restart"
+msgstr "Restart rpcd: /etc/init.d/rpcd restart"
+
+msgid "Возвращаю ModemManager и подключение…"
+msgstr "Bringing ModemManager and the connection back…"
+
+msgid "Это занимает до минуты."
+msgstr "This takes up to a minute."
+
+msgid "Сеанс открыт, ModemManager остановлен"
+msgstr "Session open, ModemManager stopped"
+
+msgid "Связь через модем отключена. Сеанс закончится сам через %s без команд."
+msgstr "The modem connection is off. The session ends by itself after %s without commands."
+
+msgid "Завершить сеанс"
+msgstr "End session"
+
+msgid "ModemManager работает, AT-порты заняты им"
+msgstr "ModemManager is running and holds the AT ports"
+
+msgid "ModemManager не запущен"
+msgstr "ModemManager is not running"
+
+msgid "Сеанс остановит ModemManager. На время сеанса связь через модем пропадёт, потом подключение восстановится само."
+msgstr "A session stops ModemManager. The modem connection is down during the session and comes back by itself afterwards."
+
+msgid "Начать сеанс"
+msgstr "Start session"
+
+msgid " (AT)"
+msgstr " (AT)"
+
+msgid "нет портов"
+msgstr "no ports"
+
+msgid "AT-команда. Enter отправляет, ↑ ↓ листают историю"
+msgstr "AT command. Enter sends, ↑ ↓ browse the history"
+
+msgid "Нет портов модема"
+msgstr "No modem ports"
+
+msgid "Сначала начните сеанс"
+msgstr "Start a session first"
+
+msgid "ждём ответ…"
+msgstr "waiting for the answer…"
+
+msgid "нет ответа: порт молчит, попробуйте другой порт или режим ожидания подольше"
+msgstr "no answer: the port is silent, try another port or a longer wait"
+
+msgid "Останавливаю ModemManager…"
+msgstr "Stopping ModemManager…"
+
+msgid "Сеанс открыт. Можно вводить команды."
+msgstr "Session open. You can type commands."
+
+msgid "Не удалось начать сеанс"
+msgstr "Could not start the session"
+
+msgid "Сеанс закрыт. ModemManager запускается, подключение вернётся само."
+msgstr "Session closed. ModemManager is starting, the connection comes back by itself."
+
+msgid "Команда слишком длинная или содержит управляющие символы."
+msgstr "The command is too long or contains control characters."
+
+msgid "не отправлено"
+msgstr "not sent"
+
+msgid "Здесь появятся команды и ответы модема."
+msgstr "Commands and modem answers appear here."
+
+msgid "ответ до 10 с"
+msgstr "answer within 10 s"
+
+msgid "до 40 с"
+msgstr "up to 40 s"
+
+msgid "до 3 минут, поиск сетей"
+msgstr "up to 3 minutes, network scan"
+
+msgid "Отправить"
+msgstr "Send"
+
+msgid "Вставить в строку ввода"
+msgstr "Put into the input line"
+
+msgid "AT-команды"
+msgstr "AT commands"
+
+msgid "Прямой доступ к модему. На время сеанса ModemManager останавливается, чтобы освободить порты, после сеанса запускается снова и сам поднимает подключение."
+msgstr "Direct access to the modem. During a session ModemManager is stopped to free the ports; afterwards it starts again and brings the connection back up."
+
+msgid "Нужен пакет socat: apk add socat"
+msgstr "The socat package is needed: apk add socat"
+
+msgid "Ожидание"
+msgstr "Wait"
+
+msgid "Скопировано"
+msgstr "Copied"
+
+msgid "Копировать"
+msgstr "Copy"
+
+msgid "Очистить"
+msgstr "Clear"
+
+msgid "Команды уходят в модем как есть. Команды, которые меняют настройки модема (AT+QCFG, AT!, AT$NV и подобные), могут сделать модем неработоспособным, отправляйте их, только если точно знаете, что они делают."
+msgstr "Commands go to the modem as they are. Commands that change modem settings (AT+QCFG, AT!, AT$NV and the like) can leave the modem unusable, send them only if you know exactly what they do."
+
+msgid "Обзор"
+msgstr "Overview"
+

@@ -1,0 +1,200 @@
+#!/bin/sh
+# AT console of Status, Modem. The AT ports belong to ModemManager while it
+# runs, so a session stops it first and starts it again at the end:
+#
+#   beam-modem-console status            session state, ports, ModemManager
+#   beam-modem-console start             stop ModemManager, open a session
+#   beam-modem-console send PORT IDLE TOTAL FILE
+#                                        send the command in FILE; the answer
+#                                        collects in $D/out until IDLE seconds
+#                                        of silence or TOTAL seconds
+#   beam-modem-console stop              end the session, ModemManager back
+#
+# A session nobody uses for 10 minutes ends by itself, so a closed browser
+# tab does not leave the modem offline.
+
+D=/var/run/beam-modem-console
+IDLE_END=600
+
+mm_running() {
+	pidof ModemManager >/dev/null
+}
+
+# interfaces that ModemManager connects
+mm_ifaces() {
+	uci -q show network | sed -n "s/^network\.\([^.]*\)\.proto='modemmanager'$/\1/p"
+}
+
+modem_json() {
+	mmcli --timeout=10 -m any -J 2>/dev/null
+}
+
+json_str() {
+	# first "key":"value" of a flat key in mmcli JSON
+	sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -1
+}
+
+ports_of() {
+	# tty ports under the modem's USB device, or all of them
+	local dev="$1" t p
+	for t in /sys/class/tty/ttyUSB* /sys/class/tty/ttyACM*; do
+		[ -e "$t" ] || continue
+		p=$(basename "$t")
+		if [ -n "$dev" ]; then
+			case "$(readlink -f "$t/device")" in "$dev"/*) ;; *) continue ;; esac
+		fi
+		echo "$p"
+	done
+}
+
+cmd_status() {
+	local active=0 last=0 now left mm=0 at="" ports p first=1
+	[ -f "$D/active" ] && active=1
+	[ -f "$D/last" ] && last=$(cat "$D/last")
+	mm_running && mm=1
+	now=$(date +%s)
+	left=$((IDLE_END - (now - ${last:-0})))
+	[ $active = 1 ] || left=0
+	[ -f "$D/at" ] && at=$(cat "$D/at")
+	ports=$(ports_of "$(cat "$D/device" 2>/dev/null)")
+	[ -n "$ports" ] || ports=$(ports_of "")
+	printf '{"active":%s,"mm":%s,"left":%d,"restoring":%s,"at":"%s","ports":[' \
+		$([ $active = 1 ] && echo true || echo false) \
+		$([ $mm = 1 ] && echo true || echo false) \
+		$left \
+		$([ -f "$D/restoring" ] && echo true || echo false) \
+		"$at"
+	for p in $ports; do
+		[ $first = 1 ] || printf ','
+		printf '"%s"' "$p"
+		first=0
+	done
+	printf ']}\n'
+}
+
+cmd_start() {
+	local j dev at
+	mkdir -p "$D"
+	if [ -f "$D/active" ]; then
+		date +%s > "$D/last"
+		echo "already"
+		return 0
+	fi
+	# remember what to bring back: the USB device, the AT port, the interfaces
+	j=$(modem_json)
+	dev=$(echo "$j" | json_str physdev)
+	[ -n "$dev" ] || dev=$(echo "$j" | json_str device)
+	at=$(echo "$j" | grep -o '"tty[A-Z]*[0-9]* (at)"' | head -1 | sed 's/"\([^ ]*\) .*/\1/')
+	[ -n "$dev" ] && echo "$dev" > "$D/device"
+	[ -n "$at" ] && echo "$at" > "$D/at"
+	mm_ifaces > "$D/ifaces"
+	for i in $(cat "$D/ifaces"); do ifdown "$i" 2>/dev/null; done
+	/etc/init.d/modemmanager stop 2>/dev/null
+	i=0
+	while mm_running && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+	date +%s > "$D/last"
+	touch "$D/active"
+	logger -t beam-modem "AT console: session started, ModemManager stopped"
+	( watchdog ) </dev/null >/dev/null 2>&1 &
+	echo "started"
+}
+
+watchdog() {
+	local last now
+	while [ -f "$D/active" ]; do
+		sleep 15
+		[ -f "$D/active" ] || exit 0
+		last=$(cat "$D/last" 2>/dev/null)
+		now=$(date +%s)
+		if [ $((now - ${last:-0})) -ge $IDLE_END ]; then
+			logger -t beam-modem "AT console: no commands for $((IDLE_END / 60)) minutes, ending the session"
+			restore
+			exit 0
+		fi
+	done
+}
+
+restore() {
+	local dev i
+	[ -f "$D/active" ] || [ -f "$D/restoring" ] || return 0
+	touch "$D/restoring"
+	rm -f "$D/active"
+	/etc/init.d/modemmanager start 2>/dev/null
+	# ModemManager learns about the modem from hotplug events it replays at
+	# start; if the modem does not show up, plug it in again in software
+	i=0
+	while [ $i -lt 40 ]; do
+		mmcli --timeout=5 -L 2>/dev/null | grep -q Modem/ && break
+		sleep 2
+		i=$((i + 2))
+	done
+	dev=$(cat "$D/device" 2>/dev/null)
+	if ! mmcli --timeout=5 -L 2>/dev/null | grep -q Modem/ && [ -n "$dev" ] && [ -e "$dev" ]; then
+		logger -t beam-modem "AT console: ModemManager does not see the modem, re-plugging $(basename "$dev")"
+		echo "$(basename "$dev")" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+		sleep 3
+		echo "$(basename "$dev")" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+		i=0
+		while [ $i -lt 60 ]; do
+			mmcli --timeout=5 -L 2>/dev/null | grep -q Modem/ && break
+			sleep 2
+			i=$((i + 2))
+		done
+	fi
+	for i in $(cat "$D/ifaces" 2>/dev/null); do ifup "$i" 2>/dev/null; done
+	rm -f "$D/restoring" "$D/last"
+	logger -t beam-modem "AT console: session ended, ModemManager started"
+}
+
+cmd_stop() {
+	[ -f "$D/active" ] || { echo "inactive"; return 0; }
+	( restore ) </dev/null >/dev/null 2>&1 &
+	echo "stopping"
+}
+
+# Commands run in the background, one at a time: a network scan can take
+# minutes and an rpc call may not. The answer collects in $D/out, $D/done
+# appears at the end.
+cmd_send() {
+	local port="$1" idle="$2" total="$3" file="$4"
+	[ -f "$D/active" ] || { echo "no session"; return 2; }
+	case "$port" in tty[A-Z]*[0-9]) ;; *) echo "bad port"; return 2 ;; esac
+	[ -c "/dev/$port" ] || { echo "no /dev/$port"; return 2; }
+	command -v socat >/dev/null || { echo "socat is missing"; return 2; }
+	[ -f "$D/out" ] && [ ! -f "$D/done" ] && { echo "busy"; return 2; }
+	rm -f "$D/out" "$D/done"
+	cp "$file" "$D/cmd"
+	: > "$D/out"
+	date +%s > "$D/last"
+	(
+		# a reader that stops after IDLE seconds of silence, TOTAL at most
+		# (a port that talks all the time, like NMEA, is never silent)
+		socat -u -T "$idle" "/dev/$port,rawer,b115200" STDOUT >> "$D/out" 2>/dev/null &
+		r=$!
+		( sleep "$total"; kill $r 2>/dev/null ) &
+		k=$!
+		sleep 1
+		# then the command with CR, through the same port settings
+		{ cat "$D/cmd"; printf '\r'; } > "/dev/$port"
+		# done as soon as the final result code is there
+		while kill -0 $r 2>/dev/null; do
+			sleep 1
+			tr -d '\r' < "$D/out" | grep -v '^$' | tail -n 1 |
+				grep -qE '^(OK|ERROR|\+CM[ES] ERROR.*|NO CARRIER|COMMAND NOT SUPPORT)$' &&
+				{ kill $r 2>/dev/null; break; }
+		done
+		wait $r 2>/dev/null
+		kill $k 2>/dev/null
+		date +%s > "$D/last"
+		touch "$D/done"
+	) </dev/null >/dev/null 2>&1 &
+	echo "sent"
+}
+
+case "$1" in
+	status) cmd_status ;;
+	start) cmd_start ;;
+	stop) cmd_stop ;;
+	send) shift; cmd_send "$@" ;;
+	*) echo "usage: $0 status | start | stop | send PORT IDLE TOTAL FILE" >&2; exit 1 ;;
+esac

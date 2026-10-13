@@ -363,3 +363,153 @@ msgstr "调制解调器"
 msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
 msgstr "ModemManager 提供的调制解调器信息，每 5 秒刷新一次。"
 
+msgid "модель и прошивка"
+msgstr "型号和固件"
+
+msgid "версия прошивки"
+msgstr "固件版本"
+
+msgid "состояние SIM"
+msgstr "SIM 状态"
+
+msgid "режим радио"
+msgstr "射频模式"
+
+msgid "уровень сигнала"
+msgstr "信号强度"
+
+msgid "оператор"
+msgstr "运营商"
+
+msgid "регистрация LTE"
+msgstr "LTE 注册"
+
+msgid "профили APN"
+msgstr "APN 配置"
+
+msgid "поиск сетей, до 3 минут"
+msgstr "搜索网络，最长 3 分钟"
+
+msgid "Поддерживает ли модем привязку к соте"
+msgstr "调制解调器是否支持锁定小区"
+
+msgid "заводской режим"
+msgstr "工厂测试模式"
+
+msgid "Нет ответа от службы beam-modem"
+msgstr "beam-modem 服务无响应"
+
+msgid "Перезапустите rpcd: /etc/init.d/rpcd restart"
+msgstr "请重启 rpcd：/etc/init.d/rpcd restart"
+
+msgid "Возвращаю ModemManager и подключение…"
+msgstr "正在恢复 ModemManager 和连接…"
+
+msgid "Это занимает до минуты."
+msgstr "最多需要一分钟。"
+
+msgid "Сеанс открыт, ModemManager остановлен"
+msgstr "会话已开启，ModemManager 已停止"
+
+msgid "Связь через модем отключена. Сеанс закончится сам через %s без команд."
+msgstr "调制解调器连接已断开。若 %s 内没有命令，会话将自动结束。"
+
+msgid "Завершить сеанс"
+msgstr "结束会话"
+
+msgid "ModemManager работает, AT-порты заняты им"
+msgstr "ModemManager 正在运行并占用 AT 端口"
+
+msgid "ModemManager не запущен"
+msgstr "ModemManager 未运行"
+
+msgid "Сеанс остановит ModemManager. На время сеанса связь через модем пропадёт, потом подключение восстановится само."
+msgstr "会话会停止 ModemManager。会话期间调制解调器连接中断，结束后自动恢复。"
+
+msgid "Начать сеанс"
+msgstr "开始会话"
+
+msgid " (AT)"
+msgstr "（AT）"
+
+msgid "нет портов"
+msgstr "无端口"
+
+msgid "AT-команда. Enter отправляет, ↑ ↓ листают историю"
+msgstr "AT 命令。回车发送，↑ ↓ 浏览历史"
+
+msgid "Нет портов модема"
+msgstr "没有调制解调器端口"
+
+msgid "Сначала начните сеанс"
+msgstr "请先开始会话"
+
+msgid "ждём ответ…"
+msgstr "等待响应…"
+
+msgid "нет ответа: порт молчит, попробуйте другой порт или режим ожидания подольше"
+msgstr "无响应：端口没有回应，请尝试其他端口或更长的等待时间"
+
+msgid "Останавливаю ModemManager…"
+msgstr "正在停止 ModemManager…"
+
+msgid "Сеанс открыт. Можно вводить команды."
+msgstr "会话已开启，可以输入命令。"
+
+msgid "Не удалось начать сеанс"
+msgstr "无法开始会话"
+
+msgid "Сеанс закрыт. ModemManager запускается, подключение вернётся само."
+msgstr "会话已关闭。ModemManager 正在启动，连接将自动恢复。"
+
+msgid "Команда слишком длинная или содержит управляющие символы."
+msgstr "命令过长或包含控制字符。"
+
+msgid "не отправлено"
+msgstr "未发送"
+
+msgid "Здесь появятся команды и ответы модема."
+msgstr "命令和调制解调器的响应将显示在这里。"
+
+msgid "ответ до 10 с"
+msgstr "响应最长 10 秒"
+
+msgid "до 40 с"
+msgstr "最长 40 秒"
+
+msgid "до 3 минут, поиск сетей"
+msgstr "最长 3 分钟，搜索网络"
+
+msgid "Отправить"
+msgstr "发送"
+
+msgid "Вставить в строку ввода"
+msgstr "填入输入框"
+
+msgid "AT-команды"
+msgstr "AT 命令"
+
+msgid "Прямой доступ к модему. На время сеанса ModemManager останавливается, чтобы освободить порты, после сеанса запускается снова и сам поднимает подключение."
+msgstr "直接访问调制解调器。会话期间 ModemManager 会停止以释放端口，会话结束后重新启动并自动恢复连接。"
+
+msgid "Нужен пакет socat: apk add socat"
+msgstr "需要 socat 软件包：apk add socat"
+
+msgid "Ожидание"
+msgstr "等待"
+
+msgid "Скопировано"
+msgstr "已复制"
+
+msgid "Копировать"
+msgstr "复制"
+
+msgid "Очистить"
+msgstr "清空"
+
+msgid "Команды уходят в модем как есть. Команды, которые меняют настройки модема (AT+QCFG, AT!, AT$NV и подобные), могут сделать модем неработоспособным, отправляйте их, только если точно знаете, что они делают."
+msgstr "命令会原样发送给调制解调器。更改调制解调器设置的命令（AT+QCFG、AT!、AT$NV 等）可能导致调制解调器无法使用，只有在确切了解其作用时才发送。"
+
+msgid "Обзор"
+msgstr "概览"
+

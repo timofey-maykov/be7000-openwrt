@@ -3,11 +3,28 @@
 		"title": "Модем",
 		"order": 45,
 		"action": {
-			"type": "view",
-			"path": "beam-modem/status"
+			"type": "firstchild"
 		},
 		"depends": {
 			"acl": [ "luci-app-beam-modem" ]
+		}
+	},
+
+	"admin/status/modem/overview": {
+		"title": "Обзор",
+		"order": 1,
+		"action": {
+			"type": "view",
+			"path": "beam-modem/status"
+		}
+	},
+
+	"admin/status/modem/at": {
+		"title": "AT-команды",
+		"order": 2,
+		"action": {
+			"type": "view",
+			"path": "beam-modem/at"
 		}
 	}
 }

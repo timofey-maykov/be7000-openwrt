@@ -4,7 +4,7 @@
 // the mode and band settings. Only mmcli is used, the AT ports stay with
 // ModemManager.
 
-import { popen, access } from 'fs';
+import { popen, access, readfile, writefile } from 'fs';
 
 const MMCLI = '/usr/bin/mmcli --timeout=15';
 
@@ -139,6 +139,18 @@ function qmi_bw(txt) {
 	return null;
 }
 
+// the AT console, see /usr/libexec/beam-modem-console
+const CONSOLE = '/usr/libexec/beam-modem-console';
+const CDIR = '/var/run/beam-modem-console';
+const WAIT = { short: [ 3, 10 ], medium: [ 10, 40 ], long: [ 120, 200 ] };
+
+function console(args) {
+	let fd = popen(`${CONSOLE} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
 function valid(s, re) {
 	return type(s) == 'string' && length(s) > 0 && length(s) < 400 && match(s, re);
 }
@@ -211,6 +223,48 @@ return {
 					res.bearer = mm(`-b ${b}`)?.bearer;
 
 				return res;
+			}
+		},
+
+		console_status: {
+			call: function() {
+				let r = console('status');
+				let st;
+				try { st = json(r.out); } catch (e) { return { error: r.out }; }
+				st.socat = access('/usr/bin/socat', 'x') ? true : false;
+				st.cmd = trim(readfile(`${CDIR}/cmd`) ?? '');
+				st.out = readfile(`${CDIR}/out`) ?? '';
+				st.done = access(`${CDIR}/done`) ? true : false;
+				return st;
+			}
+		},
+
+		console_start: {
+			call: function() {
+				let r = console('start');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		console_stop: {
+			call: function() {
+				let r = console('stop');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		console_send: {
+			args: { port: 'port', cmd: 'cmd', wait: 'wait' },
+			call: function(req) {
+				let port = req.args?.port, cmd = trim(req.args?.cmd ?? ''), w = WAIT[req.args?.wait] ?? WAIT.short;
+				if (!valid(port, /^tty[A-Z]+[0-9]+$/))
+					return { ok: false, output: 'bad port' };
+				if (!length(cmd) || length(cmd) > 512 || match(cmd, /[\x00-\x1f\x7f]/))
+					return { ok: false, output: 'bad command' };
+				let f = '/tmp/beam-modem-console.cmd';
+				writefile(f, cmd);
+				let r = console(`send ${port} ${w[0]} ${w[1]} ${f}`);
+				return { ok: r.rc == 0, output: r.out };
 			}
 		},
 

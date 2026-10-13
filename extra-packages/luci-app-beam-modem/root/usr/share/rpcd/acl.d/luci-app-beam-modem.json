@@ -1,14 +1,14 @@
 {
 	"luci-app-beam-modem": {
-		"description": "Modem status and settings through ModemManager",
+		"description": "Modem status, settings and AT console through ModemManager",
 		"read": {
 			"ubus": {
-				"beam-modem": [ "status" ]
+				"beam-modem": [ "status", "console_status" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"beam-modem": [ "set_modes", "set_bands", "enable" ]
+				"beam-modem": [ "set_modes", "set_bands", "enable", "console_start", "console_stop", "console_send" ]
 			}
 		}
 	}
