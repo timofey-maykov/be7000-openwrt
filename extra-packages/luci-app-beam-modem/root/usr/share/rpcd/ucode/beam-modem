@@ -259,7 +259,7 @@ return {
 				let port = req.args?.port, cmd = trim(req.args?.cmd ?? ''), w = WAIT[req.args?.wait] ?? WAIT.short;
 				if (!valid(port, /^tty[A-Z]+[0-9]+$/))
 					return { ok: false, output: 'bad port' };
-				if (!length(cmd) || length(cmd) > 512 || match(cmd, /[\x00-\x1f\x7f]/))
+				if (!length(cmd) || length(cmd) > 512 || match(cmd, /[[:cntrl:]]/))
 					return { ok: false, output: 'bad command' };
 				let f = '/tmp/beam-modem-console.cmd';
 				writefile(f, cmd);
