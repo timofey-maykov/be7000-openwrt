@@ -98,7 +98,7 @@ jobs:
           mkdir -p /tmp/keys
           openssl ec -in /key.pem -pubout -out /tmp/keys/feed.pem 2>/dev/null
           cd /pkgs
-          for f in *.apk; do apk adbsign --reset-signatures --sign-key /key.pem "$f"; done
+          for f in *.apk; do apk adbsign --allow-untrusted --reset-signatures --sign-key /key.pem "$f"; done
           apk verify --keys-dir /tmp/keys *.apk
           apk mkndx --allow-untrusted --sign-key /key.pem --output packages.adb *.apk
           EOF
