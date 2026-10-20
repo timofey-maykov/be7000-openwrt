@@ -1,0 +1,139 @@
+name: steer feed
+
+# Keeps feed/steer/aarch64_cortex-a73 on gh-pages at the latest stable steer.
+# Upstream releases no aarch64_cortex-a73 packages, so Zapret Manager cannot
+# install steer on the BE7000. steer builds with its own zig toolchain, not the
+# OpenWrt tree, so this adds the architecture to its table, builds only that
+# one, re-signs the packages with the feed key and publishes them. It commits
+# only when upstream has a newer release than the feed holds.
+
+on:
+  schedule:
+    - cron: "41 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if the feed already holds the latest release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: steer-feed
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: splify2/steer
+  VERSIONS: https://raw.githubusercontent.com/splify2/releases/main/version.json
+  ARCH: aarch64_cortex-a73
+  MCPU: cortex_a73
+  DIR: feed/steer/aarch64_cortex-a73
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Latest release and what the feed holds
+        id: ver
+        run: |
+          ver=$(curl -fsSL "$VERSIONS" | jq -r '.products.steer.stable')
+          case "$ver" in ''|null|*[!0-9.]*) echo "no stable steer version: $ver" >&2; exit 1 ;; esac
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          have=$(curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/gh-pages/$DIR/VERSION" || true)
+          echo "latest $ver, feed has ${have:-nothing}"
+          if [ "$ver" = "$have" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the release
+        if: steps.ver.outputs.skip != '1'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: v${{ steps.ver.outputs.ver }}
+          path: steer
+          fetch-depth: 0
+
+      - name: Build for ${{ env.ARCH }}
+        if: steps.ver.outputs.skip != '1'
+        working-directory: steer
+        run: |
+          set -eu -o pipefail
+          # one more row in the architecture table, right after cortex-a72
+          grep -q "^aarch64_cortex-a72:" build/arches.sh
+          grep -q "^$ARCH:" build/arches.sh ||
+            sed -i "/^aarch64_cortex-a72:/a $ARCH:aarch64-linux-musl:$MCPU" build/arches.sh
+          grep "^$ARCH:" build/arches.sh
+          STEER_ARCH=$ARCH ./build.sh 2>&1 | tee /tmp/build.log
+          if grep -qE 'FAILED|не удалась|packaging failed' /tmp/build.log; then
+            grep -E 'FAILED|не удалась|packaging failed' /tmp/build.log
+            exit 1
+          fi
+          ls -la out
+
+      - name: Sign and index
+        if: steps.ver.outputs.skip != '1'
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -eu
+          [ -n "$APK_SIGNING_KEY" ] || { echo "APK_SIGNING_KEY secret is not set" >&2; exit 1; }
+          mkdir -p pkgs
+          # steer-extended is the deprecated all-in-one package, the modules replace it.
+          # A feed fetches <name>-<version>.apk, upstream names files <name>-<ver>-1_<arch>.apk
+          for f in steer/out/*-1_"$ARCH".apk; do
+            n=$(basename "$f")
+            case "$n" in steer-extended-*) continue ;; esac
+            cp "$f" "pkgs/$(echo "$n" | sed "s/-1_$ARCH\.apk\$/-r1.apk/")"
+          done
+          ls -la pkgs
+          [ -n "$(ls pkgs)" ] || { echo "no packages built" >&2; exit 1; }
+          umask 077
+          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
+          umask 022
+          cat > "$RUNNER_TEMP/sign.sh" <<'EOF'
+          set -e
+          apk add -q apk-tools openssl >/dev/null
+          mkdir -p /tmp/keys
+          openssl ec -in /key.pem -pubout -out /tmp/keys/feed.pem 2>/dev/null
+          cd /pkgs
+          for f in *.apk; do apk adbsign --reset-signatures --sign-key /key.pem "$f"; done
+          apk verify --keys-dir /tmp/keys *.apk
+          apk mkndx --allow-untrusted --sign-key /key.pem --output packages.adb *.apk
+          EOF
+          docker run --rm \
+            -v "$PWD/pkgs:/pkgs" \
+            -v "$RUNNER_TEMP/key.pem:/key.pem:ro" \
+            -v "$RUNNER_TEMP/sign.sh:/sign.sh:ro" \
+            alpine:edge sh /sign.sh
+          rm -f "$RUNNER_TEMP/key.pem"
+          echo "${{ steps.ver.outputs.ver }}" > pkgs/VERSION
+
+      - name: Publish
+        if: steps.ver.outputs.skip != '1'
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
+          cd pages
+          git sparse-checkout set --no-cone "/$DIR/"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # the main feed build may push at the same time: on a refused push
+          # start again from the fresh tip, the directory is ours alone
+          for i in 1 2 3 4 5; do
+            git fetch -q --filter=blob:none --depth 1 origin gh-pages
+            git checkout -q -B gh-pages FETCH_HEAD
+            rm -rf "$DIR"
+            mkdir -p "$DIR"
+            cp ../pkgs/* "$DIR/"
+            git add -A "$DIR"
+            if git diff --cached --quiet; then
+              echo "feed unchanged"
+              exit 0
+            fi
+            git commit -q -m "feed: steer ${{ steps.ver.outputs.ver }} for $ARCH"
+            git push -q origin gh-pages && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

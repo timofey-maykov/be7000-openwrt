@@ -21,6 +21,9 @@ https://timofey-maykov.github.io/be7000-openwrt/feed/hybrid-failover/aarch64_cor
 # LuCI pages and scripts that need no compiler, published on every change
 https://timofey-maykov.github.io/be7000-openwrt/feed/extra/aarch64_cortex-a73/packages.adb
 
+# steer (split routing used by Zapret Manager), rebuilt from every upstream release
+https://timofey-maykov.github.io/be7000-openwrt/feed/steer/aarch64_cortex-a73/packages.adb
+
 # Kernel modules built against the kernel this firmware ships. The mirror's
 # own target feed is built against a newer kernel and cannot satisfy the
 # dependency, so the modules have to come from here.
