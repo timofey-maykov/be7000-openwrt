@@ -28,6 +28,7 @@ The last two patches fix real driver bugs and do not depend on the board, they a
 | 0905 | qcom-ppe: EDMA receive takes the next buffer on every round, before, after a dropped frame the loop took one already freed |
 | 0906 | qcom-ppe: rows of multi-word PPE tables are written whole, the hardware loses a single-word write |
 | 0907 | qcom-ppe: bridging the ports in the PPE is enabled by the module parameter bridge_offload, off by default |
+| 0908 | spi-qpic-snand: when 8 bit ECC does not fit the page and its OOB, 4 bit is used. Needed for newer BE7000 boards with the ESMT F50D1G41LB flash (64 bytes of OOB), where stock runs ECC4 and 8 bits cannot fit |
 
 ## OpenWrt tree changes
 
