@@ -55,6 +55,47 @@ _st_install_awg() {
 	command -v awg >/dev/null 2>&1 && _st_awg_loaded
 }
 
+# steer: the upstream releases have no aarch64_cortex-a73 build, the Beam WRT
+# feed rebuilds every steer release for it (feed/steer). Same packages and the
+# same module choice as upstream, only from the signed feed.
+BEAM_STEER_FEED="https://timofey-maykov.github.io/be7000-openwrt/feed/steer/aarch64_cortex-a73/packages.adb"
+
+_beam_steer_feed() {
+	local f=/etc/apk/repositories.d/customfeeds.list
+	grep -qxF "$BEAM_STEER_FEED" "$f" 2>/dev/null && return 0
+	# a line copied by hand may carry quotes or spaces, apk cannot read it
+	[ -f "$f" ] && sed -i '/feed\/steer\//d' "$f"
+	echo "$BEAM_STEER_FEED" >> "$f"
+	_stl_say "Добавлен фид steer для Beam WRT"
+}
+
+stl_engine_install() {
+	local ver="$1" m mods="" p pkgs old="" n was_on="" rc
+	shift
+	for m in "$@"; do case "$m" in vpn) mods="$mods vless" ;; hy2) mods="$mods hysteria2" ;; proxy) mods="$mods proxy" ;; esac; done
+	mods="$(for m in $mods $(_stl_mods_present); do echo "$m"; done | awk '!s[$0]++' | tr '\n' ' ')"
+	pkgs="steer-core$(for m in $mods; do printf ' steer-%s' "$m"; done)"
+	STL_NEW=""; STL_PKGS="$pkgs"
+	for p in $pkgs; do _pkg_is_installed "$p" || STL_NEW="$STL_NEW $p"; done
+	# the old all-in-one packages give way to steer-core and its modules
+	for n in steer steer-extended libsteer libsteer-wolfssl; do _pkg_is_installed "$n" && old="$old !$n"; done
+	_beam_steer_feed
+	stl_enabled && was_on=1
+	_stl_say "Ставим ядро steer из фида Beam WRT: $(echo $pkgs | sed 's/ /, /g')"
+	$UPDATE >&2
+	$INSTALL -u $pkgs $old >&2; rc=$?
+	if [ "$rc" != 0 ] || ! stl_v2; then
+		[ -n "$was_on" ] && stl_present && stl_restart >/dev/null 2>&1
+		echo "ОШИБКА: ядро steer из фида Beam WRT не установилось"
+		return 1
+	fi
+	if [ -n "$was_on" ]; then stl_restart >/dev/null 2>&1; else stl_stop; fi
+	[ -n "$ver" ] && [ "$(stl_version)" != "$ver" ] &&
+		_stl_say "В фиде Beam WRT пока steer $(stl_version), сборка $ver появится в течение нескольких часов"
+	_stl_say "Ядро steer $(stl_version) установлено$( [ -n "$mods" ] && printf ', модули: %s' "$(echo $mods | sed 's/ /, /g')")"
+	return 0
+}
+
 zm_update_status() {
 	local cur latest newer=false
 	cur="$(_awg_pkg_ver zapret-manager-beam)"

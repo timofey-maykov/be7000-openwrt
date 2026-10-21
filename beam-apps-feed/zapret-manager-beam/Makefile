@@ -1,12 +1,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=zapret-manager-beam
-PKG_VERSION:=9.90.2.06
-PKG_RELEASE:=3
+PKG_VERSION:=9.90.3.97
+PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/StressOzz/Zapret-Manager.git
-PKG_SOURCE_VERSION:=e7c002722bcdba68f97252c116a0dbdad242ee4c
+PKG_SOURCE_VERSION:=37c0474ee1db1d49903d128cd4a3eed1a1b20158
 PKG_MIRROR_HASH:=skip
 
 PKG_MAINTAINER:=Timofey Maykov <itnitro@gmail.com>
