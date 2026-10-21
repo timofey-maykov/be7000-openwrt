@@ -1,0 +1,27 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] roamd: let a Beam WRT router join as a node
+
+Before a capture the controller checks the roamd release feed for a
+package for the node's OpenWrt version and architecture. There is no
+aarch64_cortex-a73 build there, so a Xiaomi BE7000 on Beam WRT was
+reported as "repository unreachable" and could not be captured. Such a
+node installs roamd from its own signed Beam WRT feed, which
+mesh_node_install already falls back to, so treat it as ready.
+---
+diff --git a/package/roamd/src/mesh_discover.c b/package/roamd/src/mesh_discover.c
+index fae7774..2d47d22 100644
+--- a/package/roamd/src/mesh_discover.c
++++ b/package/roamd/src/mesh_discover.c
+@@ -116,6 +116,12 @@ static const char *pkg_state(const char *os, const char *arch)
+ 	if (!os[0] || !arch[0])
+ 		return "missing";
+ 
++	/* Beam WRT (Xiaomi BE7000, the only aarch64_cortex-a73 build) has no
++	 * package in the roamd release feed: the node installs roamd from its
++	 * own signed feed, which mesh_node_install falls back to */
++	if (!strcmp(arch, "aarch64_cortex-a73"))
++		return "ready";
++
+ 	dot = strrchr(os, '.');
+ 	snprintf(branch, sizeof(branch), "%.*s",
+ 		 dot ? (int)(dot - os) : (int)strlen(os), os);

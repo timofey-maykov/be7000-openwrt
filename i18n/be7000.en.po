@@ -1104,8 +1104,8 @@ msgstr "On Beam WRT"
 msgid "Сеть MLO roamd не меняет. 802.11r на ней приводил к сбою прошивки модуля 5 ГГц и перезагрузке роутера, поэтому в сборке для Beam WRT такие сети пропускаются."
 msgstr "roamd leaves the MLO network unchanged. 802.11r on it crashed the 5 GHz module firmware and rebooted the router, so the Beam WRT build skips such networks."
 
-msgid "BE7000 может управлять сетью из нескольких роутеров. Подключить его узлом к сети, которой управляет другой роутер, пока нельзя: контроллер ставит пакеты из фида roamd, а там нет сборки под процессор BE7000."
-msgstr "The BE7000 can manage a network of several routers. It cannot yet join as a node a network that another router manages: that controller installs packages from the roamd feed, which has no build for the BE7000 CPU."
+msgid "BE7000 может управлять сетью из нескольких роутеров и сам подключаться узлом к сети, которой управляет другой BE7000 с Beam WRT. К контроллеру на обычной OpenWrt узлом он не подключится: тот ищет roamd для узла в фиде roamd, а там нет сборки под процессор BE7000. При захвате узел сбрасывается к заводским настройкам, MLO на нём после этого выключен."
+msgstr "The BE7000 can manage a network of several routers and can join as a node a network that another BE7000 on Beam WRT manages. It cannot join a controller on plain OpenWrt: that one looks for roamd for the node in the roamd feed, which has no build for the BE7000 CPU. A captured node is reset to factory settings, so MLO is off on it afterwards."
 
 msgid "Обновления roamd приходят из фида Beam WRT вместе с остальными пакетами, а не через встроенную проверку обновлений."
 msgstr "roamd updates come from the Beam WRT feed together with the other packages, not through its built-in update check."
