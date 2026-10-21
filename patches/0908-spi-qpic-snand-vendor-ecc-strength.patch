@@ -84,7 +84,7 @@ Signed-off-by: Timofey Maykov <itnitro@gmail.com>
  	struct qpic_ecc *ecc_cfg;
  
  	cwperpage = mtd->writesize / NANDC_STEP_SIZE;
-@@ -274,6 +318,29 @@
+@@ -274,6 +318,34 @@
  		ecc_cfg->strength = 4;
  	}
  
@@ -110,6 +110,11 @@ Signed-off-by: Timofey Maykov <itnitro@gmail.com>
 +			 mtd->oobsize);
 +		ecc_cfg->strength = 4;
 +	}
++
++	dev_info(snandc->dev, "SPI NAND %02x:%02x, %d bit ECC%s\n",
++		 nand_to_spinand(nand)->id.data[0],
++		 nand_to_spinand(nand)->id.data[1], ecc_cfg->strength,
++		 vendor_strength ? " (vendor table)" : "");
 +
  	if (ecc_cfg->step_size != NANDC_STEP_SIZE) {
  		dev_err(snandc->dev,
