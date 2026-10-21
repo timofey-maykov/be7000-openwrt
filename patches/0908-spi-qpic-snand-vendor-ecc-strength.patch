@@ -1,0 +1,109 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] spi: qpic-snand: use the vendor ECC strength of each flash part
+
+The Xiaomi BE7000 ships with different SPI NAND parts: most boards carry
+a GigaDevice GD5F1GQ5REYIG with 128 bytes of OOB, newer ones an ESMT
+F50D1G41LB with 64. The stock kernel picks the ECC strength per part from
+its flash table (8 bits for the GigaDevice part, 4 for the ESMT one) and
+its device tree value is not used. With the 8 bits our device tree asks
+for, every read on the ESMT part failed with -EBADMSG and UBI could not
+attach, so no build booted on those boards.
+
+Take the strength from the same table, keyed by the JEDEC ID. For parts
+it does not list, keep the device tree value unless an 8 bit codeword
+does not fit the page and its OOB, then use 4 bits.
+
+Signed-off-by: Timofey Maykov <itnitro@gmail.com>
+---
+--- a/drivers/spi/spi-qpic-snand.c
++++ b/drivers/spi/spi-qpic-snand.c
+@@ -245,6 +245,50 @@
+ 	.free = qcom_spi_ooblayout_free,
+ };
+ 
++/*
++ * ECC strength the vendor firmware uses for each SPI NAND part, from the
++ * flash table of the Xiaomi BE7000 stock kernel (QSDK, Linux 5.4). Boards
++ * of one model ship with different parts, and the data the stock firmware
++ * and its bootloader write is only readable with the same strength, so pick
++ * it by the JEDEC ID rather than from the device tree.
++ */
++static const struct {
++	u8 mfr;
++	u8 dev;
++	u8 strength;
++} qcom_spi_vendor_ecc[] = {
++	{ 0xc8, 0xc1, 8 },	/* GigaDevice GD5F1GQ4RE9IG */
++	{ 0xc8, 0xc9, 4 },	/* GigaDevice GD5F1GQ4RE9IH */
++	{ 0xc8, 0x41, 8 },	/* GigaDevice GD5F1GQ5REYIG */
++	{ 0xc8, 0x21, 4 },	/* GigaDevice GD5F1GQ5REYIH */
++	{ 0xc8, 0x42, 8 },	/* GigaDevice GD5F2GQ5REYIG */
++	{ 0xc8, 0x22, 4 },	/* GigaDevice GD5F2GQ5REYIH */
++	{ 0xc8, 0x25, 4 },	/* GigaDevice GD5F4GQ6REYIHR */
++	{ 0xc8, 0x11, 4 },	/* ESMT F50D1G41LB */
++	{ 0xc8, 0x51, 8 },	/* ESMT F50D2G41KA */
++	{ 0xef, 0xba, 4 },	/* Winbond W25N01GWZEIG */
++	{ 0xef, 0xbc, 4 },	/* Winbond W25N01JW */
++	{ 0xef, 0xbf, 4 },	/* Winbond W25N02JWZEIF */
++	{ 0xc2, 0x92, 4 },	/* Macronix MX35UF1GE4AC */
++	{ 0xc2, 0xa6, 4 },	/* Macronix MX35UF2GE4AD */
++	{ 0xc2, 0xb7, 8 },	/* Macronix MX35UF4GE4AD */
++	{ 0x2c, 0x15, 8 },	/* Micron MT29F1G01ABBFDWB */
++	{ 0xe5, 0x21, 4 },	/* Dosilicon DS35M1GA */
++};
++
++static int qcom_spi_vendor_ecc_strength(struct nand_device *nand)
++{
++	struct spinand_device *spinand = nand_to_spinand(nand);
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(qcom_spi_vendor_ecc); i++)
++		if (spinand->id.data[0] == qcom_spi_vendor_ecc[i].mfr &&
++		    spinand->id.data[1] == qcom_spi_vendor_ecc[i].dev)
++			return qcom_spi_vendor_ecc[i].strength;
++
++	return 0;
++}
++
+ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
+ {
+ 	struct qcom_nand_controller *snandc = nand_to_qcom_snand(nand);
+@@ -252,7 +296,7 @@
+ 	struct nand_ecc_props *user = &nand->ecc.user_conf;
+ 	struct nand_ecc_props *conf = &nand->ecc.ctx.conf;
+ 	struct mtd_info *mtd = nanddev_to_mtd(nand);
+-	int cwperpage, bad_block_byte, ret;
++	int cwperpage, bad_block_byte, vendor_strength, ret;
+ 	struct qpic_ecc *ecc_cfg;
+ 
+ 	cwperpage = mtd->writesize / NANDC_STEP_SIZE;
+@@ -274,6 +318,29 @@
+ 		ecc_cfg->strength = 4;
+ 	}
+ 
++	/*
++	 * A device tree may describe a board that ships with several flash
++	 * parts. Follow the vendor firmware for the parts it knows; for any
++	 * other, never ask for 8 bits where an 8 bit codeword (516 data bytes,
++	 * 13 parity, 2 spare and the bad block byte) does not fit the page
++	 * and its OOB.
++	 */
++	vendor_strength = qcom_spi_vendor_ecc_strength(nand);
++	if (vendor_strength && vendor_strength != ecc_cfg->strength) {
++		dev_info(snandc->dev,
++			 "SPI NAND %02x:%02x uses %d bit ECC, not %d\n",
++			 nand_to_spinand(nand)->id.data[0],
++			 nand_to_spinand(nand)->id.data[1],
++			 vendor_strength, ecc_cfg->strength);
++		ecc_cfg->strength = vendor_strength;
++	} else if (!vendor_strength && ecc_cfg->strength == 8 &&
++		   cwperpage * (516 + 13 + 2 + 1) > mtd->writesize + mtd->oobsize) {
++		dev_info(snandc->dev,
++			 "8 bit ECC does not fit %u bytes of OOB, using 4 bit\n",
++			 mtd->oobsize);
++		ecc_cfg->strength = 4;
++	}
++
+ 	if (ecc_cfg->step_size != NANDC_STEP_SIZE) {
+ 		dev_err(snandc->dev,
+ 			"only %u bytes ECC step size is supported\n",
