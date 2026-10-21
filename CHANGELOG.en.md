@@ -2,6 +2,12 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.9**, October 21, 2026.
+- Newer BE7000 boards carry a different flash, the ESMT F50D1G41LB, and no OpenWrt based build booted on them, Beam WRT included. Stock picks the error correction (ECC) strength by flash model: 8 bits on the usual GigaDevice part, 4 bits on the ESMT one. Beam WRT always used 8, so on ESMT the kernel could not read its own flash. The ECC now comes from the same table as in stock, for all 17 flash models stock knows. Routers that work today keep their setting, the update is the usual one. The flash model and the ECC in use show up in the system log as an SPI NAND line.
+- Steer installs from Zapret Manager. Before, the install stopped with an error: Zapret Manager downloads Steer from its author's releases, which have no build for the BE7000 CPU. Steer is now built in the Beam WRT feed from the author's sources and follows his releases, and Zapret Manager is updated to 3.97 and takes Steer from there. A Steer feed line added by hand with a mistake gets fixed.
+- roamd: a BE7000 can join as a node a network that another BE7000 on Beam WRT manages. Before, the controller refused, saying the package repository was unreachable. A captured node is reset to factory settings.
+- The feed has a Status, Modem page for USB modems through ModemManager: signal with a graph, cell, band and frequency, carrier aggregation, mode and band selection, and an AT command console. Install it with apk add luci-app-beam-modem. Cell data on MBIM modems also needs qmi-utils, which is in the feed too.
+
 **1.4.8**, October 11, 2026.
 - If the 5 GHz module firmware crashed while hostapd was reconfiguring the MLO network with clients connected, for example after a Wi-Fi settings change, the ath12k driver used tables that had already been freed, the kernel crashed and the router rebooted. Now the firmware restarts and the router keeps running.
 - After installing a package with a new protocol (GRE, L2TP, 6in4 and others), its interface did not come up until the network was restarted: the network learns its protocols only when it starts. LuCI now shows a Restart network button in the top bar with an explanation, and apk prints the same after the install.
