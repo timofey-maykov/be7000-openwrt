@@ -70,21 +70,43 @@ _beam_steer_feed() {
 }
 
 stl_engine_install() {
-	local ver="$1" m mods="" p pkgs old="" n was_on="" rc
+	local ver="$1" m mods="" p pkgs n legacy="" keep="$STL_TMP/spec.keep" was_on="" rc
 	shift
 	for m in "$@"; do case "$m" in vpn) mods="$mods vless" ;; hy2) mods="$mods hysteria2" ;; proxy) mods="$mods proxy" ;; esac; done
+	# The old all-in-one packages give way to steer-core and its modules.
+	# Only a 1.x engine counts: steer-core provides "steer" itself, so
+	# apk info -e steer is true for 2.x as well.
+	if stl_present && ! stl_v2; then
+		for n in steer steer-extended libsteer libsteer-wolfssl; do _pkg_is_installed "$n" && legacy="$legacy $n"; done
+		case " $legacy " in *" steer-extended "*) mods="$mods vless" ;; esac
+	fi
 	mods="$(for m in $mods $(_stl_mods_present); do echo "$m"; done | awk '!s[$0]++' | tr '\n' ' ')"
 	pkgs="steer-core$(for m in $mods; do printf ' steer-%s' "$m"; done)"
 	STL_NEW=""; STL_PKGS="$pkgs"
 	for p in $pkgs; do _pkg_is_installed "$p" || STL_NEW="$STL_NEW $p"; done
-	# the old all-in-one packages give way to steer-core and its modules
-	for n in steer steer-extended libsteer libsteer-wolfssl; do _pkg_is_installed "$n" && old="$old !$n"; done
 	_beam_steer_feed
 	stl_enabled && was_on=1
 	_stl_say "Ставим ядро steer из фида Beam WRT: $(echo $pkgs | sed 's/ /, /g')"
 	$UPDATE >&2
-	$INSTALL -u $pkgs $old >&2; rc=$?
+	mkdir -p "$STL_TMP"
+	[ -s "$STL_SPEC" ] && cp -f "$STL_SPEC" "$keep"
+	if [ -n "$legacy" ]; then
+		# apk cannot swap them in one transaction, steer-core provides
+		# the very name the old package carries
+		_stl_say "Снимаем прежнее ядро steer $(stl_version), оно мешает новому"
+		"$STL_INIT" stop >/dev/null 2>&1
+		$DELETE $legacy >&2
+	elif [ -n "$STL_REINSTALL" ]; then
+		"$STL_INIT" stop >/dev/null 2>&1
+		n=""; for p in $pkgs; do _pkg_is_installed "$p" && n="$n $p"; done
+		[ -n "$n" ] && $DELETE $n >&2
+	fi
+	$INSTALL -u $pkgs >&2; rc=$?
+	[ "$rc" = 0 ] || { $INSTALL -u $pkgs >&2; rc=$?; }
+	[ -s "$keep" ] && [ ! -s "$STL_SPEC" ] && { mkdir -p "$STL_ETC"; cp -f "$keep" "$STL_SPEC"; }
+	rm -f "$keep"
 	if [ "$rc" != 0 ] || ! stl_v2; then
+		[ -n "$legacy" ] && ! stl_present && echo "!! Прежнее ядро steer снято, а новое не встало, нажмите установку ещё раз"
 		[ -n "$was_on" ] && stl_present && stl_restart >/dev/null 2>&1
 		echo "ОШИБКА: ядро steer из фида Beam WRT не установилось"
 		return 1
