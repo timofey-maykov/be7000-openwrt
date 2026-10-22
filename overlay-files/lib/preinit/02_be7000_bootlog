@@ -54,9 +54,9 @@ be7000_bootlog_early() {
 # CPUs (sysrq l) into the log.
 be7000_usblog() {
 	(
-		# own device node: no wait for hotplug to create /dev/sda
-		mknod /tmp/be7000-sda b 8 0 2>/dev/null
-		d=/tmp/be7000-sda
+		# own device node in /dev (/tmp is nodev): no wait for hotplug
+		mknod /dev/be7000-sda b 8 0 2>/dev/null
+		d=/dev/be7000-sda
 		i=0 n="" k=0
 		while [ $i -lt 300 ]; do
 			sleep 1
