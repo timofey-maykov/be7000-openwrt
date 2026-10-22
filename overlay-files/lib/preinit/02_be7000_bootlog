@@ -54,26 +54,30 @@ be7000_bootlog_early() {
 # CPUs (sysrq l) into the log.
 be7000_usblog() {
 	(
-		i=0 slot=""
-		while [ $i -lt 100 ]; do
-			sleep 3
+		# own device node: no wait for hotplug to create /dev/sda
+		mknod /tmp/be7000-sda b 8 0 2>/dev/null
+		d=/tmp/be7000-sda
+		i=0 n="" k=0
+		while [ $i -lt 300 ]; do
+			sleep 1
 			i=$((i + 1))
-			case $((i % 10)) in 0) echo w > /proc/sysrq-trigger ;; 5) echo l > /proc/sysrq-trigger ;; esac
-			[ -b /dev/sda ] || continue
-			if [ -z "$slot" ]; then
-				n=$(dd if=/dev/sda bs=512 count=1 2>/dev/null | sed -n 's/^BE7LOG \([0-9]*\)$/\1/p' | head -n 1)
+			case $((i % 30)) in 0) echo w > /proc/sysrq-trigger ;; 15) echo l > /proc/sysrq-trigger ;; esac
+			[ -e /sys/block/sda ] || continue
+			if [ -z "$n" ]; then
+				n=$(dd if=$d bs=512 count=1 2>/dev/null | sed -n 's/^BE7LOG \([0-9]*\)$/\1/p' | head -n 1)
 				n=$(( ${n:-0} + 1 ))
-				slot=$(( n % 8 ))
-				printf 'BE7LOG %s\n' "$n" | dd of=/dev/sda bs=512 count=1 conv=sync,fsync 2>/dev/null
+				printf 'BE7LOG %s\n' "$n" | dd of=$d bs=512 count=1 conv=sync,fsync 2>/dev/null
 			fi
+			# boot n owns 1 MiB slot (n % 8); inside it, 4 rotating 256 KiB records
 			{
-				echo "=== usblog boot $n slot $slot uptime $(cut -d' ' -f1 /proc/uptime)s ==="
-				dmesg
+				echo "=== usblog boot $n rec $k uptime $(cut -d' ' -f1 /proc/uptime)s ==="
+				dmesg | tail -c 200000
 				echo "=== ps ==="
 				ps w
 				echo "=== end ==="
-			} 2>&1 | head -c 1040000 > /tmp/be7000-usblog.txt
-			dd if=/tmp/be7000-usblog.txt of=/dev/sda bs=64k seek=$(( 16 + slot * 16 )) count=16 conv=sync,notrunc,fsync 2>/dev/null
+			} 2>&1 | head -c 262000 > /tmp/be7000-usblog.txt
+			dd if=/tmp/be7000-usblog.txt of=$d bs=64k seek=$(( 16 + (n % 8) * 16 + (k % 4) * 4 )) count=4 conv=sync,notrunc,fsync 2>/dev/null
+			k=$((k + 1))
 		done
 	) </dev/null >/dev/null 2>&1 &
 }
