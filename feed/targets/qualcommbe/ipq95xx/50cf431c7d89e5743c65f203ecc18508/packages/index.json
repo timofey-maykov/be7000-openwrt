@@ -22,6 +22,7 @@
     "kmod-ath11k": "6.18.52.7.2-r4",
     "kmod-ath11k-ahb": "6.18.52.7.2-r4",
     "kmod-ath12k": "6.18.52.7.2-r4",
+    "kmod-be7000-mtdconcat": "6.18.52-r1",
     "kmod-bonding": "6.18.52-r1",
     "kmod-br-netfilter": "6.18.52-r1",
     "kmod-cfg80211": "6.18.52.7.2-r4",
