@@ -118,6 +118,9 @@ s77_concat_up() {
 	grep -q "\"$CONCAT\"" /proc/mtd || insmod be7000-mtdconcat parts="$1,overlay" name=$CONCAT || return 1
 	num=$(s77_mtdnum $CONCAT)
 	[ -n "$num" ] || return 1
+	# the node of the new MTD device, hotplug makes it only later
+	[ -c /dev/mtd$num ] || mknod /dev/mtd$num c $(tr ':' ' ' < /sys/class/mtd/mtd$num/dev) 2>/dev/null
+	[ -c /dev/mtd$num ] || return 1
 	echo "$num"
 }
 
@@ -221,6 +224,7 @@ s77_enable() {
 	num=$(s77_concat_up "$slot")
 	if [ -z "$num" ]; then
 		s77_log "could not glue $slot and the data partition, nothing changed"
+		s77_concat_down
 		[ "$src" = cfg ] && { ubiattach -m "$(s77_mtdnum overlay)" -d 1 >/dev/null 2>&1; s77_nodes ubi1; }
 		s77_enable_undo "$src"
 		return 1
