@@ -77,6 +77,12 @@ be7000_bootlog_write() {
 		dmesg | head -c 200000
 		[ "$1" = preinit ] || be7000_bootlog_state
 		echo "=== end ==="
-	} 2>&1 | head -c 480000 > /tmp/be7000-bootlog.txt
+	} 2>&1 | head -c 270000 > /tmp/be7000-bootlog.txt
+	# keep the last copy of the previous boot next to this one, so a boot
+	# that hung can be read after the power cycle that follows it
+	[ -f /tmp/be7000-bootlog-prev.txt ] ||
+		dd if=/dev/mtd27 bs=64k count=8 2>/dev/null | tr -d '\377' |
+		sed '/^=== previous boot ===$/,$d' | head -c 200000 > /tmp/be7000-bootlog-prev.txt
+	{ echo "=== previous boot ==="; cat /tmp/be7000-bootlog-prev.txt; } >> /tmp/be7000-bootlog.txt
 	mtd -q -e crash_syslog write /tmp/be7000-bootlog.txt crash_syslog >/dev/null 2>&1
 }
