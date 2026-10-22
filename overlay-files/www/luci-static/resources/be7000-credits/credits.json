@@ -14,9 +14,9 @@
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=6802658",
 					"star": true,
-					"ru": "Удалённый доступ к роутеру, и на этой плате нашлась причина мёртвого Ethernet. До этого десятки перепрошивок и дампы стока и OpenWrt с одной платы.",
-					"en": "Remote access to the router, and the cause of the dead Ethernet was found on that board. Before that, dozens of reflashes and stock and OpenWrt dumps from the same board.",
-					"zh": "提供了路由器的远程访问，正是在这块主板上找到了以太网失效的原因。在此之前，在同一块主板上做了几十次刷机，并提供了原厂固件和 OpenWrt 的转储。"
+					"ru": "Удалённый доступ к роутеру, и на этой плате нашлась причина мёртвого Ethernet. До этого десятки перепрошивок и дампы стока и OpenWrt с одной платы. А на новой плате с флешкой ESMT подключил UART, и по нему нашлась ошибка драйвера флешки, из-за которой такие платы иногда не загружались.",
+					"en": "Remote access to the router, and the cause of the dead Ethernet was found on that board. Before that, dozens of reflashes and stock and OpenWrt dumps from the same board. And on a new board with an ESMT flash he hooked up UART, which showed the flash driver bug that sometimes kept those boards from booting.",
+					"zh": "提供了路由器的远程访问，正是在这块主板上找到了以太网失效的原因。在此之前，在同一块主板上做了几十次刷机，并提供了原厂固件和 OpenWrt 的转储。后来又在一块使用 ESMT 闪存的新主板上接了 UART，借此找到了闪存驱动的错误，正是它让这类主板有时无法启动。"
 				},
 				{
 					"name": "Denchik777",
@@ -30,9 +30,9 @@
 					"name": "BurmecianKnight",
 					"site": "GitHub",
 					"url": "https://github.com/BurmecianKnight",
-					"ru": "Тесты в issue #1, дамп загрузчика, замеры линии на стоке и на каждой сборке.",
-					"en": "Tests in issue #1, a bootloader dump, lane measurements on stock and on every build.",
-					"zh": "在 issue #1 中做了测试，提供了引导程序转储，并在原厂固件和每个版本上测量了链路。"
+					"ru": "Тесты в issue #1, дамп загрузчика, замеры линии на стоке и на каждой сборке. Docker на USB-диске в issue #6 и свои замеры аппаратного NAT в issue #9.",
+					"en": "Tests in issue #1, a bootloader dump, lane measurements on stock and on every build. Docker on a USB disk in issue #6 and his own hardware NAT measurements in issue #9.",
+					"zh": "在 issue #1 中做了测试，提供了引导程序转储，并在原厂固件和每个版本上测量了链路。在 issue #6 中反馈了 USB 硬盘上的 Docker 问题，并在 issue #9 中做了自己的硬件 NAT 测试。"
 				},
 				{
 					"name": "fufliks862",
@@ -91,6 +91,14 @@
 					"ru": "Подсказал хранить настройки OpenWrt в томе стока, с 1.2.6 откат на сток их не стирает.",
 					"en": "Suggested keeping OpenWrt settings in the stock volume, since 1.2.6 a rollback to stock no longer wipes them.",
 					"zh": "建议把 OpenWrt 的设置保存在原厂固件的卷中，从 1.2.6 起回退到原厂固件不再清除这些设置。"
+				},
+				{
+					"name": "KaMaToZzz",
+					"site": "GitHub",
+					"url": "https://github.com/KaMaToZzz",
+					"ru": "Docker без интернета в контейнерах, исправлено в 1.4.4, нехватка места под Docker и сбой точки монтирования на USB-диске в issues #7, #8 и #11.",
+					"en": "Docker containers without internet, fixed in 1.4.4, running out of space for Docker and a broken mount point on a USB disk in issues #7, #8 and #11.",
+					"zh": "在 issues #7、#8 和 #11 中反馈了 Docker 容器无法上网（已在 1.4.4 修复）、Docker 空间不足以及 USB 硬盘挂载点失效的问题。"
 				}
 			]
 		},
@@ -106,9 +114,9 @@
 					"name": "zh8416",
 					"site": "GitHub",
 					"url": "https://github.com/zh8416",
-					"ru": "Проверил аппаратную разгрузку на проводном подключении 2,5 Гбит/с, с iperf3, conntrack и загрузкой процессора.",
-					"en": "Tested hardware offload on a wired 2.5 Gbit/s connection, with iperf3, conntrack and CPU load.",
-					"zh": "在 2.5 Gbit/s 有线连接上测试了硬件加速，提供了 iperf3、conntrack 和 CPU 负载数据。"
+					"ru": "Проверил аппаратную разгрузку на проводном подключении 2,5 Гбит/с, с iperf3, conntrack и загрузкой процессора. Разобрал установку со стороннего загрузчика в issue #10.",
+					"en": "Tested hardware offload on a wired 2.5 Gbit/s connection, with iperf3, conntrack and CPU load. Worked through installing from a third-party bootloader in issue #10.",
+					"zh": "在 2.5 Gbit/s 有线连接上测试了硬件加速，提供了 iperf3、conntrack 和 CPU 负载数据。在 issue #10 中一起排查了用第三方引导程序安装的问题。"
 				}
 			]
 		},

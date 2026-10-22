@@ -113,7 +113,7 @@ The patches in patches are distributed under GPL-2.0-only, like the Linux kernel
 
 ## Thanks
 
-The full list with links is on the System, Credits page in LuCI, and the same list is in the SSH login greeting. Special thanks to zerc00l for remote access to the router. The cause of the dead Ethernet was found on that board. And to kravasuper for the port everything stands on.
+The full list with links is on the System, Credits page in LuCI, and the same list is in the SSH login greeting. Special thanks to zerc00l for remote access to the router. The cause of the dead Ethernet was found on that board, and on his new board with an ESMT flash UART showed the bug that sometimes kept such routers from booting. And to kravasuper for the port everything stands on. Thanks to everyone who helped in the GitHub issues, BurmecianKnight, KaMaToZzz, zh8416, xiaoqi2020 and tera2null.
 
 ## Support the project
 
