@@ -2,6 +2,14 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.0**, October 23, 2026.
+- Fixed a bug that sometimes kept routers from the latest batches from booting after an install or a reboot, with the indicator staying orange.
+- On the System, Slots page the second slot can be given over to packages. It is joined with the settings partition, and packages get about 57 MB instead of 20. Before that the router saves a copy of the slot, which brings the slot back.
+- A reset to factory settings now also works when the settings live outside the firmware's own partition.
+- The router boots about 8 seconds faster.
+- Zapret Manager is updated to 3.97-r2, Steer modules can be added from the panel again.
+- The CPU voltage no longer goes below the stock level.
+
 **1.4.9**, October 21, 2026.
 - The firmware installs and runs on routers from the latest batches, where it did not boot before. Routers that already run it see no change.
 - Steer installs from Zapret Manager. Zapret Manager is updated to 3.97.
