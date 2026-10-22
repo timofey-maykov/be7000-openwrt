@@ -18,6 +18,7 @@
 # holds.
 #
 #   be7000-slots storage-status
+#   be7000-slots storage-name     the mtd given over to /overlay, if any
 #   be7000-slots backup [dir]
 #   be7000-slots backup-check <file> [--file-only]
 #   be7000-slots restore <file> --yes
@@ -91,6 +92,11 @@ cmd_info() {
 	cur="$(current)" || { echo '{"error":"no ubi.mtd=rootfs* on the command line"}'; return 1; }
 	case "$slot" in 0|1) ;; *) echo '{"error":"slot is 0 or 1"}'; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo '{"error":"that is the running slot"}'; return 1; }
+	# given over to /overlay: attached as ubi2 for good, nothing to boot there
+	[ "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" = "$(mtd_of $slot)" ] && {
+		printf '{"slot":%s,"kind":"storage"}\n' "$slot"
+		return 0
+	}
 	mtdn="$(grep "\"$(mtd_of $slot)\"" /proc/mtd | cut -d: -f1 | sed 's/mtd//')"
 	[ -n "$mtdn" ] || { echo '{"error":"no such mtd"}'; return 1; }
 	for n in /sys/class/ubi/ubi[0-9]*; do
@@ -298,10 +304,8 @@ cmd_storage_status() {
 	[ -n "$(storage_mtd_name)" ] && cfg=true || cfg=false
 	[ "$kind" = slotstorage ] && act=true
 	ubi="$(ubi_dev_of_mtd "$num")" && [ -d "/sys/class/ubi/${ubi}_0" ] && vol=true
-	if [ "$act" = true ]; then
-		free="$(avail_kb /overlay)"
-		cap="$(df -k /overlay | awk 'END { print $(NF-4) }')"
-	fi
+	free="$(avail_kb /overlay)"
+	cap="$(df -k /overlay | awk 'END { print $(NF-4) }')"
 	[ -n "$(ls /mnt 2>/dev/null)" ] && usb=true
 	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
 	printf '{"current":%s,"other":%s,"other_mtd":"%s","mtd_bytes":%s,"overlay":"%s","configured":%s,"active":%s,"volume":%s,"capacity_kb":%s,"free_kb":%s,"overlay_used_kb":%s,"backup_dir":"%s"}\n' \
@@ -600,6 +604,7 @@ status) cmd_status ;;
 info) cmd_info "$2" ;;
 switch) cmd_switch "$2" ;;
 storage-status) cmd_storage_status ;;
+storage-name) storage_mtd_name ;;
 backup) shift; cmd_backup "$@" ;;
 backup-check) shift; cmd_backup_check "$@" ;;
 restore) shift; cmd_restore "$@" ;;

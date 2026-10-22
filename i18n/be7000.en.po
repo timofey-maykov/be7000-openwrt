@@ -1127,3 +1127,156 @@ msgstr "Open roamd"
 
 msgid "Эти команды выполняются в заводской прошивке. В самом Beam WRT nvram нет, здесь слот переключает эта страница."
 msgstr "These commands run in the factory firmware. Beam WRT itself has no nvram, here the slot is switched by this page."
+
+msgid "/overlay вернётся на раздел данных (около 23 МБ). Если пакеты и настройки туда не помещаются, роутер откажется, тогда сначала удалите лишние пакеты."
+msgstr "/overlay goes back to the data partition (about 23 MB). If the packages and settings do not fit there, the router refuses; remove some packages first then."
+
+msgid "/overlay сейчас на USB-диске, места там больше. Этот режим не нужен."
+msgstr "/overlay is on a USB disk now, which has more room. This mode is not needed."
+
+msgid "Вернуть второй слот"
+msgstr "Give the second slot back"
+
+msgid "Вернуть второй слот?"
+msgstr "Give the second slot back?"
+
+msgid "Вернуть копию в слот"
+msgstr "Write a backup back into the slot"
+
+msgid "Возврат второго слота"
+msgstr "Giving the second slot back"
+
+msgid "Второй слот можно отдать под /overlay, то есть под пакеты и настройки. Места станет около 33 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно."
+msgstr "The second slot can be given over to /overlay, that is to packages and settings. You get about 33 MB instead of 23. The price: slot %d no longer holds a spare firmware. Going back to the factory firmware or to a previous Beam WRT by switching slots is not possible until you give the slot back. Beam WRT updates work as usual."
+
+msgid "Второй слот под пакеты"
+msgstr "Second slot for packages"
+
+msgid "Готово. /overlay переедет после перезагрузки."
+msgstr "Done. /overlay moves after a reboot."
+
+msgid "Если слот пустой, копия не нужна."
+msgstr "If the slot is empty, no backup is needed."
+
+msgid "Загрузить копию и записать в слот %d"
+msgstr "Upload a backup and write it into slot %d"
+
+msgid "Записать"
+msgstr "Write"
+
+msgid "Записать копию в слот %d?"
+msgstr "Write the backup into slot %d?"
+
+msgid "Записывает сохранённую копию обратно во второй слот, например чтобы вернуть заводскую прошивку. Нужны оба файла, копия и .meta."
+msgstr "Writes a saved backup back into the second slot, for example to get the factory firmware back. Both files are needed, the backup and its .meta."
+
+msgid "Запись копии в слот %d"
+msgstr "Writing the backup into slot %d"
+
+msgid "Запуск"
+msgstr "Starting"
+
+msgid "Копия загружена. Теперь выберите файл .meta к ней."
+msgstr "The backup is uploaded. Now choose its .meta file."
+
+msgid "Копия слота %d"
+msgstr "Backup of slot %d"
+
+msgid "Не получилось: %s"
+msgstr "Failed: %s"
+
+msgid "Не удалось скачать: %s"
+msgstr "Download failed: %s"
+
+msgid "Не удалось узнать состояние."
+msgstr "Could not get the state."
+
+msgid "Отдан под пакеты (/overlay)"
+msgstr "Given over to packages (/overlay)"
+
+msgid "Отдать пустой слот под пакеты"
+msgstr "Give the empty slot over to packages"
+
+msgid "Отдать слот %d под пакеты?"
+msgstr "Give slot %d over to packages?"
+
+msgid "Перед тем как стереть слот, роутер сохраняет его содержимое байт в байт и сверяет копию с флешем. Копия лежит в оперативной памяти до перезагрузки, скачайте оба файла на компьютер. С ними слот можно вернуть как было, например с заводской прошивкой."
+msgstr "Before erasing the slot the router saves its contents byte for byte and checks the copy against the flash. The copy stays in RAM until a reboot, download both files to your computer. With them the slot can be put back as it was, for example with the factory firmware."
+
+msgid "Перезагрузить"
+msgstr "Reboot"
+
+msgid "Позже"
+msgstr "Later"
+
+msgid "Понимаю, отката на второй слот не будет"
+msgstr "I understand there is no rollback to the second slot"
+
+msgid "После перезагрузки второй слот будет свободен. В него можно вернуть копию на этой странице или поставить прошивку."
+msgstr "After the reboot the second slot is free. You can write a backup back into it on this page or install a firmware there."
+
+msgid "После этого откатиться на прошивку из слота %d нельзя, пока слот не вернёте и не запишете копию обратно."
+msgstr "After that you cannot roll back to the firmware in slot %d until you give the slot back and write the backup into it."
+
+msgid "Работаю"
+msgstr "Working"
+
+msgid "Роутер перезагружается. Страница обновится сама."
+msgstr "The router is rebooting. The page reloads by itself."
+
+msgid "Роутер проверит копию по контрольной сумме и запишет её во второй слот, затем прочитает слот и сверит ещё раз."
+msgstr "The router checks the backup against its checksum, writes it into the second slot, then reads the slot back and checks again."
+
+msgid "Сделать копию слота %d"
+msgstr "Back up slot %d"
+
+msgid "Сейчас /overlay %s, свободно %s МБ из %s МБ."
+msgstr "/overlay is %s now, %s MB free of %s MB."
+
+msgid "Скачать .meta"
+msgstr "Download .meta"
+
+msgid "Скачать копию"
+msgstr "Download the backup"
+
+msgid "Слот %d будет стёрт. Если в нём есть прошивка, роутер откажется и попросит сделать копию."
+msgstr "Slot %d will be erased. If it holds a firmware, the router refuses and asks for a backup."
+
+msgid "Слот %d будет стёрт. Перед этим роутер ещё раз сверит копию с флешем. Убедитесь, что оба файла копии скачаны: после перезагрузки их на роутере не будет."
+msgstr "Slot %d will be erased. Before that the router checks the backup against the flash once more. Make sure both backup files are downloaded: after a reboot they are gone from the router."
+
+msgid "Слот %d отдан под пакеты."
+msgstr "Slot %d is given over to packages."
+
+msgid "Слот %d под пакеты"
+msgstr "Slot %d for packages"
+
+msgid "Слот %d подготовлен под пакеты. /overlay переедет туда после перезагрузки."
+msgstr "Slot %d is prepared for packages. /overlay moves there after a reboot."
+
+msgid "Стереть слот %d и отдать под пакеты"
+msgstr "Erase slot %d and give it over to packages"
+
+msgid "Шаг 1. Копия второго слота"
+msgstr "Step 1. Back up the second slot"
+
+msgid "Шаг 2. Отдать слот под пакеты"
+msgstr "Step 2. Give the slot over to packages"
+
+msgid "внутри текущего слота"
+msgstr "inside the running slot"
+
+msgid "на USB-диске"
+msgstr "on a USB disk"
+
+msgid "на втором слоте"
+msgstr "on the second slot"
+
+msgid "на разделе данных (mtd28)"
+msgstr "on the data partition (mtd28)"
+
+msgid "не запустилось"
+msgstr "did not start"
+
+msgid "не получилось"
+msgstr "failed"

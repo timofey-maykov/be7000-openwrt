@@ -332,6 +332,11 @@ cmd_boot_sync() {
 				sleep 2
 			done
 		fi
+		# the spare slot given over to /overlay, attached as ubi2 in preinit
+		if [ $useful = 0 ] && [ "$(uci -q get fstab.slotstorage.enabled)" = 1 ] &&
+			[ -e "$(uci -q get fstab.slotstorage.device)" ]; then
+			useful=1
+		fi
 		if [ $useful = 0 ] && [ "$(uci -q get bigoverlay.main.enabled)" = 1 ] && [ ! -e /etc/bigoverlay.failed ] &&
 			[ "${bigen:-0}" = 1 ] && [ -n "$bigdev" ] && [ -e "$bigdev" ]; then
 			useful=1

@@ -1,8 +1,24 @@
 'use strict';
 
-import { popen } from 'fs';
+import { popen, lsdir, readfile, stat, mkdir } from 'fs';
 
 const BIN = '/usr/libexec/be7000-slots';
+const BKDIR = '/tmp/be7000-slot-backup';
+
+// a backup made by "be7000-slots backup", or one uploaded back for a restore
+function backup_file(f) {
+	return type(f) == 'string' && match(f, /^\/tmp\/be7000-slot-backup\/[A-Za-z0-9._-]+\.img\.gz$/) && stat(f)?.type == 'file';
+}
+
+function meta_of(f) {
+	let m = {};
+	for (let l in split(readfile(`${f}.meta`) ?? '', '\n')) {
+		let kv = match(l, /^([a-z0-9]+)=(.*)$/);
+		if (kv)
+			m[kv[1]] = kv[2];
+	}
+	return m;
+}
 
 function run(args) {
 	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
@@ -41,6 +57,60 @@ return {
 				if (r.rc == 0 && req.args?.reboot)
 					popen('(sleep 3; reboot) </dev/null >/dev/null 2>&1 &', 'r')?.close();
 				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		// the spare slot as room for /overlay
+		storage_status: {
+			call: function() {
+				let st = parse(run('storage-status').out);
+				// the page uploads a backup here for a restore
+				mkdir(BKDIR);
+				let list = [];
+				for (let n in lsdir(BKDIR) ?? []) {
+					let f = `${BKDIR}/${n}`;
+					if (!backup_file(f))
+						continue;
+					let m = meta_of(f);
+					push(list, { file: f, size: stat(f).size, kind: m.kind, version: m.version, date: m.date, slot: m.slot, checked: !!m.sha256 });
+				}
+				st.backups = list;
+				st.storage_mtd = trim(run('storage-name').out);
+				return st;
+			}
+		},
+		storage_job: {
+			args: { cmd: '', file: '' },
+			call: function(req) {
+				let c = req.args?.cmd, f = req.args?.file, a;
+				switch (c) {
+				case 'backup': a = 'backup'; break;
+				case 'enable-backup':
+					if (!backup_file(f))
+						return { error: 'no such backup' };
+					a = `storage-enable --backup '${f}' --yes`;
+					break;
+				case 'enable-empty': a = 'storage-enable --empty --yes'; break;
+				case 'disable': a = 'storage-disable --yes'; break;
+				case 'restore':
+					if (!backup_file(f))
+						return { error: 'no such backup' };
+					a = `restore '${f}' --yes`;
+					break;
+				default: return { error: 'unknown command' };
+				}
+				return parse(run(`job-start ${a}`).out);
+			}
+		},
+		storage_job_status: {
+			call: function() {
+				return parse(run('job-status').out);
+			}
+		},
+		reboot: {
+			call: function() {
+				popen('(sleep 3; reboot) </dev/null >/dev/null 2>&1 &', 'r')?.close();
+				return { ok: true };
 			}
 		}
 	}

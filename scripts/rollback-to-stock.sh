@@ -18,6 +18,11 @@ for arg in $(cat /proc/cmdline); do
 	esac
 done
 case "$CUR" in rootfs) OTHER=1 ;; rootfs_1) OTHER=0 ;; *) echo "unexpected ubi.mtd=$CUR"; exit 1 ;; esac
+# the other slot may have been given over to /overlay (System, Slots)
+if [ -n "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" ]; then
+	echo "the other slot holds /overlay, not the stock firmware (System, Slots), stop"
+	exit 1
+fi
 # /overlay shares stock's settings volume on mtd28 (bigoverlay). Stock does not
 # keep its settings as plain files there. Its preinit (89_mount_sec_cfg) moves
 # them into an encrypted container, sec_cfg/data.vol (a spare copy lives in

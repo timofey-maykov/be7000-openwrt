@@ -190,7 +190,7 @@ be7000_overlay_refresh() {
 	for n in /sys/class/ubi/ubi*_*/name; do
 		[ -e "$n" ] || continue
 		case "$(cat "$n")" in
-		rootfs_data|overlay_data|cfg)
+		rootfs_data|overlay_data|cfg|be7000_storage)
 			be7000_overlay_refresh_vol "/dev/$(basename "$(dirname "$n")")"
 			;;
 		esac

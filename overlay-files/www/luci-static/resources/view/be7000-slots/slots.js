@@ -10,6 +10,7 @@
 'require view';
 'require rpc';
 'require ui';
+'require fs';
 
 // System, Slots: the two firmware slots, which one runs, which one boots,
 // what the other one holds, and a switch. The work is
@@ -18,6 +19,10 @@
 var callStatus = rpc.declare({ object: 'be7000-slots', method: 'status' });
 var callInfo = rpc.declare({ object: 'be7000-slots', method: 'info', params: [ 'slot' ] });
 var callSwitch = rpc.declare({ object: 'be7000-slots', method: 'switch', params: [ 'slot', 'reboot' ] });
+var callStorage = rpc.declare({ object: 'be7000-slots', method: 'storage_status' });
+var callJob = rpc.declare({ object: 'be7000-slots', method: 'storage_job', params: [ 'cmd', 'file' ] });
+var callJobStatus = rpc.declare({ object: 'be7000-slots', method: 'storage_job_status' });
+var callReboot = rpc.declare({ object: 'be7000-slots', method: 'reboot' });
 
 var CSS = `
 .bs-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:12px 0 18px}
@@ -36,6 +41,11 @@ var CSS = `
 .bs-sec h4{margin:12px 0 4px;font-size:14px}
 .bs-sec p,.bs-sec li{font-size:13px;line-height:1.5}
 .bs-sec ul{margin:4px 0 8px 18px;padding:0}
+.bs-store{max-width:860px}
+.bs-store .bs-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.bs-store .bs-bk{padding:8px 10px;border-radius:8px;border:1px solid var(--nb-border,rgba(128,128,128,.3));margin:6px 0}
+.bs-store .bs-note{font-size:13px;line-height:1.5}
+.bs-store progress{width:100%}
 .bs-sec pre{font-size:12.5px;padding:8px 10px;border-radius:8px;background:var(--nb-surface-2,rgba(128,128,128,.08));overflow-x:auto;white-space:pre}
 `;
 
@@ -44,12 +54,13 @@ var KIND = {
 	openwrt: function() { return _('Beam WRT или другой OpenWrt'); },
 	test: function() { return _('Тестовая сборка Beam WRT'); },
 	empty: function() { return _('Пусто'); },
+	storage: function() { return _('Отдан под пакеты (/overlay)'); },
 	unknown: function() { return _('Не удалось определить'); }
 };
 
 return view.extend({
 	load: function() {
-		return L.resolveDefault(callStatus(), {});
+		return Promise.all([ L.resolveDefault(callStatus(), {}), L.resolveDefault(callStorage(), {}) ]);
 	},
 
 	slotCard: function(st, slot) {
@@ -130,7 +141,8 @@ return view.extend({
 		]));
 	},
 
-	render: function(st) {
+	render: function(data) {
+		var st = data[0], ss = data[1];
 		if (!document.getElementById('bs-css'))
 			document.head.appendChild(E('style', { 'id': 'bs-css' }, CSS));
 
@@ -153,6 +165,7 @@ return view.extend({
 			E('h2', {}, _('Слоты')),
 			E('div', { 'class': 'cbi-map-descr' }, _('На флеше два слота для прошивки. Загрузчик запускает один из них, а второй ждёт. Обычно во втором лежит заводская прошивка, и на неё можно вернуться в любой момент. Прошивка, которая загрузилась, сама делает свой слот основным.')),
 			E('div', { 'class': 'bs-slots' }, [ this.slotCard(st, 0), this.slotCard(st, 1) ]),
+			this.storageSection(st, ss),
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, _('Флаги загрузчика')),
 				E('table', { 'class': 'table bs-flags' }, flags.map(function(f) {
@@ -161,6 +174,205 @@ return view.extend({
 			]),
 			this.about(st)
 		]);
+	},
+
+	mb: function(kb) {
+		return (Math.round((+kb || 0) / 102.4) / 10).toFixed(1);
+	},
+
+	overlayWhere: function(kind) {
+		return {
+			slotstorage: _('на втором слоте'),
+			bigoverlay: _('на разделе данных (mtd28)'),
+			inslot: _('внутри текущего слота'),
+			usb: _('на USB-диске')
+		}[kind] || kind;
+	},
+
+	storageSection: function(st, ss) {
+		var body = E('div', { 'class': 'bs-store' });
+		var oth = 1 - st.current;
+
+		if (!ss || ss.error) {
+			body.appendChild(E('p', { 'class': 'bs-note' }, (ss && ss.error) || _('Не удалось узнать состояние.')));
+			return E('div', { 'class': 'cbi-section' }, [ E('h3', {}, _('Второй слот под пакеты')), body ]);
+		}
+
+		body.appendChild(E('p', { 'class': 'bs-note' }, _('Второй слот можно отдать под /overlay, то есть под пакеты и настройки. Места станет около 33 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно.').format(oth)));
+		body.appendChild(E('p', { 'class': 'bs-note' }, _('Сейчас /overlay %s, свободно %s МБ из %s МБ.').format(this.overlayWhere(ss.overlay), this.mb(ss.free_kb), this.mb(ss.capacity_kb))));
+
+		if (ss.configured && ss.active) {
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('Слот %d отдан под пакеты.').format(oth)));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button cbi-button-negative', 'click': ui.createHandlerFn(this, 'askDisable') }, _('Вернуть второй слот'))
+			]));
+		}
+		else if (ss.configured) {
+			body.appendChild(E('p', { 'class': 'alert-message warning' }, _('Слот %d подготовлен под пакеты. /overlay переедет туда после перезагрузки.').format(oth)));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button cbi-button-action important', 'click': ui.createHandlerFn(this, 'reboot') }, _('Перезагрузить'))
+			]));
+		}
+		else if (ss.overlay == 'usb') {
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('/overlay сейчас на USB-диске, места там больше. Этот режим не нужен.')));
+		}
+		else {
+			body.appendChild(E('h4', {}, _('Шаг 1. Копия второго слота')));
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('Перед тем как стереть слот, роутер сохраняет его содержимое байт в байт и сверяет копию с флешем. Копия лежит в оперативной памяти до перезагрузки, скачайте оба файла на компьютер. С ними слот можно вернуть как было, например с заводской прошивкой.')));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button cbi-button-action', 'click': ui.createHandlerFn(this, 'runJob', 'backup', null, _('Копия слота %d').format(oth)) }, _('Сделать копию слота %d').format(oth))
+			]));
+
+			(ss.backups || []).forEach(L.bind(function(b) {
+				if (String(b.slot) != String(oth))
+					return;
+				var name = b.file.replace(/^.*\//, '');
+				body.appendChild(E('div', { 'class': 'bs-bk' }, [
+					E('div', {}, [ E('strong', {}, name), ' ', '(%s МБ)'.format(this.mb(b.size / 1024)) ]),
+					E('div', { 'class': 'bs-mtd' }, '%s %s %s'.format((KIND[b.kind] || KIND.unknown)(), b.version || '', b.date || '')),
+					E('div', { 'class': 'bs-row' }, [
+						E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, 'download', b.file) }, _('Скачать копию')),
+						E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, 'download', b.file + '.meta') }, _('Скачать .meta')),
+						E('button', { 'class': 'cbi-button cbi-button-negative important', 'click': ui.createHandlerFn(this, 'askEnable', 'enable-backup', b.file, oth) }, _('Шаг 2. Отдать слот под пакеты'))
+					])
+				]));
+			}, this));
+
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('Если слот пустой, копия не нужна.')));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button cbi-button-negative', 'click': ui.createHandlerFn(this, 'askEnable', 'enable-empty', null, oth) }, _('Отдать пустой слот под пакеты'))
+			]));
+
+			body.appendChild(E('h4', {}, _('Вернуть копию в слот')));
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('Записывает сохранённую копию обратно во второй слот, например чтобы вернуть заводскую прошивку. Нужны оба файла, копия и .meta.')));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, 'uploadRestore', oth) }, _('Загрузить копию и записать в слот %d').format(oth))
+			]));
+		}
+
+		return E('div', { 'class': 'cbi-section' }, [ E('h3', {}, _('Второй слот под пакеты')), body ]);
+	},
+
+	download: function(path) {
+		return fs.read_direct(path, 'blob').then(function(blob) {
+			var a = E('a', { 'href': URL.createObjectURL(blob), 'download': path.replace(/^.*\//, ''), 'style': 'display:none' });
+			document.body.appendChild(a);
+			a.click();
+			URL.revokeObjectURL(a.href);
+			a.remove();
+		}).catch(function(e) {
+			ui.addNotification(null, E('p', {}, _('Не удалось скачать: %s').format(e.message || e)), 'error');
+		});
+	},
+
+	askEnable: function(cmd, file, oth) {
+		var ok = E('input', { 'type': 'checkbox', 'id': 'bs-ok' });
+		var btn = E('button', { 'class': 'cbi-button cbi-button-negative important', 'disabled': true, 'click': L.bind(function() {
+			ui.hideModal();
+			return this.runJob(cmd, file, _('Слот %d под пакеты').format(oth), true);
+		}, this) }, _('Стереть слот %d и отдать под пакеты').format(oth));
+		ok.addEventListener('change', function() { btn.disabled = !ok.checked; });
+
+		ui.showModal(_('Отдать слот %d под пакеты?').format(oth), [
+			E('p', {}, cmd == 'enable-backup'
+				? _('Слот %d будет стёрт. Перед этим роутер ещё раз сверит копию с флешем. Убедитесь, что оба файла копии скачаны: после перезагрузки их на роутере не будет.').format(oth)
+				: _('Слот %d будет стёрт. Если в нём есть прошивка, роутер откажется и попросит сделать копию.').format(oth)),
+			E('p', {}, _('После этого откатиться на прошивку из слота %d нельзя, пока слот не вернёте и не запишете копию обратно.').format(oth)),
+			E('p', {}, [ ok, ' ', E('label', { 'for': 'bs-ok' }, _('Понимаю, отката на второй слот не будет')) ]),
+			E('div', { 'class': 'right' }, [ E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Отмена')), ' ', btn ])
+		]);
+	},
+
+	askDisable: function() {
+		ui.showModal(_('Вернуть второй слот?'), [
+			E('p', {}, _('/overlay вернётся на раздел данных (около 23 МБ). Если пакеты и настройки туда не помещаются, роутер откажется, тогда сначала удалите лишние пакеты.')),
+			E('p', {}, _('После перезагрузки второй слот будет свободен. В него можно вернуть копию на этой странице или поставить прошивку.')),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Отмена')), ' ',
+				E('button', { 'class': 'cbi-button cbi-button-negative important', 'click': L.bind(function() {
+					ui.hideModal();
+					return this.runJob('disable', null, _('Возврат второго слота'), true);
+				}, this) }, _('Вернуть'))
+			])
+		]);
+	},
+
+	uploadRestore: function(oth) {
+		var self = this;
+		var dir = '/tmp/be7000-slot-backup/';
+		return ui.uploadFile(dir + 'upload.img.gz').then(function() {
+			ui.addNotification(null, E('p', {}, _('Копия загружена. Теперь выберите файл .meta к ней.')), 'info');
+			return ui.uploadFile(dir + 'upload.img.gz.meta');
+		}).then(function() {
+			ui.showModal(_('Записать копию в слот %d?').format(oth), [
+				E('p', {}, _('Роутер проверит копию по контрольной сумме и запишет её во второй слот, затем прочитает слот и сверит ещё раз.')),
+				E('div', { 'class': 'right' }, [
+					E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Отмена')), ' ',
+					E('button', { 'class': 'cbi-button cbi-button-negative important', 'click': function() {
+						ui.hideModal();
+						return self.runJob('restore', dir + 'upload.img.gz', _('Запись копии в слот %d').format(oth), false);
+					} }, _('Записать'))
+				])
+			]);
+		}).catch(function(e) {
+			if (e && e.message)
+				ui.addNotification(null, E('p', {}, e.message), 'error');
+		});
+	},
+
+	runJob: function(cmd, file, title, offerReboot) {
+		var bar = E('progress', { 'max': 100, 'value': 0 });
+		var msg = E('p', { 'class': 'spinning' }, _('Запуск'));
+		ui.showModal(title, [ msg, bar ]);
+
+		return L.resolveDefault(callJob(cmd, file || ''), {}).then(L.bind(function(r) {
+			if (!r || !r.started) {
+				this.jobFailed(title, (r && r.error) || _('не запустилось'), '');
+				return;
+			}
+			var poll = L.bind(function() {
+				return L.resolveDefault(callJobStatus(), {}).then(L.bind(function(s) {
+					if (s.state == 'running') {
+						L.dom.content(msg, s.msg || _('Работаю'));
+						bar.value = +s.pct || 0;
+						window.setTimeout(poll, 2000);
+						return;
+					}
+					if (s.state == 'done') {
+						if (offerReboot) {
+							ui.showModal(title, [
+								E('p', {}, _('Готово. /overlay переедет после перезагрузки.')),
+								E('div', { 'class': 'right' }, [
+									E('button', { 'class': 'cbi-button', 'click': function() { ui.hideModal(); window.location.reload(); } }, _('Позже')), ' ',
+									E('button', { 'class': 'cbi-button cbi-button-action important', 'click': ui.createHandlerFn(this, 'reboot') }, _('Перезагрузить'))
+								])
+							]);
+						} else {
+							ui.hideModal();
+							window.location.reload();
+						}
+						return;
+					}
+					this.jobFailed(title, s.msg || _('не получилось'), s.log || '');
+				}, this));
+			}, this);
+			window.setTimeout(poll, 1500);
+		}, this));
+	},
+
+	jobFailed: function(title, why, log) {
+		ui.showModal(title, [
+			E('p', {}, _('Не получилось: %s').format(why)),
+			log ? E('pre', {}, log) : '',
+			E('div', { 'class': 'right' }, E('button', { 'class': 'cbi-button', 'click': function() { ui.hideModal(); window.location.reload(); } }, _('Закрыть')))
+		]);
+	},
+
+	reboot: function() {
+		ui.showModal(_('Перезагрузка'), [ E('p', { 'class': 'spinning' }, _('Роутер перезагружается. Страница обновится сама.')) ]);
+		return callReboot().then(function() {
+			ui.awaitReconnect();
+		});
 	},
 
 	about: function(st) {
