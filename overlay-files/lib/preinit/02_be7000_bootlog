@@ -36,8 +36,8 @@ be7000_bootlog_early() {
 	be7000_bootlog_write preinit
 	(
 		i=0
-		while [ $i -lt 20 ]; do
-			sleep 15
+		while [ $i -lt 60 ]; do
+			sleep 3
 			i=$((i + 1))
 			be7000_bootlog_write "periodic $i"
 		done
