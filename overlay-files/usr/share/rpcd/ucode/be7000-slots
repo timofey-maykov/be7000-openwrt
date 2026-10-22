@@ -92,6 +92,7 @@ return {
 					break;
 				case 'enable-empty': a = 'storage-enable --empty --yes'; break;
 				case 'disable': a = 'storage-disable --yes'; break;
+				case 'cancel': return parse(run('storage-cancel').out);
 				case 'restore':
 					if (!backup_file(f))
 						return { error: 'no such backup' };

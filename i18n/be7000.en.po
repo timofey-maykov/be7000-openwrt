@@ -1128,8 +1128,6 @@ msgstr "Open roamd"
 msgid "Эти команды выполняются в заводской прошивке. В самом Beam WRT nvram нет, здесь слот переключает эта страница."
 msgstr "These commands run in the factory firmware. Beam WRT itself has no nvram, here the slot is switched by this page."
 
-msgid "/overlay вернётся на раздел данных (около 23 МБ). Если пакеты и настройки туда не помещаются, роутер откажется, тогда сначала удалите лишние пакеты."
-msgstr "/overlay goes back to the data partition (about 23 MB). If the packages and settings do not fit there, the router refuses; remove some packages first then."
 
 msgid "/overlay сейчас на USB-диске, места там больше. Этот режим не нужен."
 msgstr "/overlay is on a USB disk now, which has more room. This mode is not needed."
@@ -1146,14 +1144,10 @@ msgstr "Write a backup back into the slot"
 msgid "Возврат второго слота"
 msgstr "Giving the second slot back"
 
-msgid "Второй слот можно отдать под /overlay, то есть под пакеты и настройки. Места станет около 33 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно."
-msgstr "The second slot can be given over to /overlay, that is to packages and settings. You get about 33 MB instead of 23. The price: slot %d no longer holds a spare firmware. Going back to the factory firmware or to a previous Beam WRT by switching slots is not possible until you give the slot back. Beam WRT updates work as usual."
 
 msgid "Второй слот под пакеты"
 msgstr "Second slot for packages"
 
-msgid "Готово. /overlay переедет после перезагрузки."
-msgstr "Done. /overlay moves after a reboot."
 
 msgid "Если слот пустой, копия не нужна."
 msgstr "If the slot is empty, no backup is needed."
@@ -1212,8 +1206,6 @@ msgstr "Later"
 msgid "Понимаю, отката на второй слот не будет"
 msgstr "I understand there is no rollback to the second slot"
 
-msgid "После перезагрузки второй слот будет свободен. В него можно вернуть копию на этой странице или поставить прошивку."
-msgstr "After the reboot the second slot is free. You can write a backup back into it on this page or install a firmware there."
 
 msgid "После этого откатиться на прошивку из слота %d нельзя, пока слот не вернёте и не запишете копию обратно."
 msgstr "After that you cannot roll back to the firmware in slot %d until you give the slot back and write the backup into it."
@@ -1245,14 +1237,10 @@ msgstr "Slot %d will be erased. If it holds a firmware, the router refuses and a
 msgid "Слот %d будет стёрт. Перед этим роутер ещё раз сверит копию с флешем. Убедитесь, что оба файла копии скачаны: после перезагрузки их на роутере не будет."
 msgstr "Slot %d will be erased. Before that the router checks the backup against the flash once more. Make sure both backup files are downloaded: after a reboot they are gone from the router."
 
-msgid "Слот %d отдан под пакеты."
-msgstr "Slot %d is given over to packages."
 
 msgid "Слот %d под пакеты"
 msgstr "Slot %d for packages"
 
-msgid "Слот %d подготовлен под пакеты. /overlay переедет туда после перезагрузки."
-msgstr "Slot %d is prepared for packages. /overlay moves there after a reboot."
 
 msgid "Стереть слот %d и отдать под пакеты"
 msgstr "Erase slot %d and give it over to packages"
@@ -1280,3 +1268,39 @@ msgstr "did not start"
 
 msgid "не получилось"
 msgstr "failed"
+
+msgid "/overlay вернётся на раздел данных (около 23 МБ), это происходит при следующей загрузке."
+msgstr "/overlay goes back to the data partition (about 23 MB), this happens on the next boot."
+
+msgid "Всё готово к возврату. /overlay вернётся на раздел данных при следующей загрузке, слот %d станет пустым."
+msgstr "All set to go back. /overlay returns to the data partition on the next boot, slot %d becomes empty."
+
+msgid "Всё готово к переносу. /overlay переедет на склеенный раздел при следующей загрузке, она займёт на полминуты дольше обычного."
+msgstr "All set for the move. /overlay moves to the joined partition on the next boot, which takes about half a minute longer than usual."
+
+msgid "Второй слот и раздел данных можно склеить в один раздел под /overlay, то есть под пакеты и настройки. Места станет около 61 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки, и настройки заводской прошивки на разделе данных сотрутся. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно."
+msgstr "The second slot and the data partition can be joined into one partition for /overlay, that is for packages and settings. You get about 61 MB instead of 23. The price: slot %d no longer holds a spare firmware, and the factory firmware settings on the data partition are erased. Going back to the factory firmware or to a previous Beam WRT by switching slots is not possible until you give the slot back. Beam WRT updates work as usual."
+
+msgid "Готово. Перенос произойдёт при следующей загрузке."
+msgstr "Done. The move happens on the next boot."
+
+msgid "Отменить"
+msgstr "Cancel"
+
+msgid "После перезагрузки второй слот будет пустым. В него можно вернуть копию на этой странице или поставить прошивку."
+msgstr "After the reboot the second slot is empty. You can write a backup back into it on this page or install a firmware there."
+
+msgid "Раздел данных тоже будет отформатирован. Настройки и пакеты Beam WRT роутер перенесёт сам, а настройки заводской прошивки там пропадут."
+msgstr "The data partition is formatted too. The router moves the Beam WRT settings and packages by itself, the factory firmware settings there are lost."
+
+msgid "Сам перенос происходит при следующей загрузке, до запуска системы."
+msgstr "The move itself happens on the next boot, before the system starts."
+
+msgid "Сейчас в /overlay %s МБ, а на разделе данных помещается около %s МБ. Чтобы вернуть слот, сначала удалите лишние пакеты."
+msgstr "/overlay holds %s MB now, and the data partition takes about %s MB. To give the slot back, remove some packages first."
+
+msgid "Слот %d и раздел данных отданы под пакеты."
+msgstr "Slot %d and the data partition are given over to packages."
+
+msgid "Слот %d отдан под пакеты, но подключить его при загрузке не получилось, /overlay сейчас временный. Посмотрите системный журнал, строки be7000 slot storage."
+msgstr "Slot %d is given over to packages, but attaching it at boot failed, /overlay is temporary now. See the system log, lines with be7000 slot storage."

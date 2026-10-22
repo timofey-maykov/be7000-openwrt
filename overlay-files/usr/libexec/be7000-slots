@@ -24,6 +24,7 @@
 #   be7000-slots restore <file> --yes
 #   be7000-slots storage-enable (--backup <file> | --empty) --yes
 #   be7000-slots storage-disable --yes
+#   be7000-slots storage-cancel        drop a move that waits for the reboot
 #   be7000-slots job-start <command> [args]   run one of the long commands in
 #   be7000-slots job-status                   the background and poll it
 #
@@ -93,10 +94,10 @@ cmd_info() {
 	case "$slot" in 0|1) ;; *) echo '{"error":"slot is 0 or 1"}'; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo '{"error":"that is the running slot"}'; return 1; }
 	# given over to /overlay: attached as ubi2 for good, nothing to boot there
-	[ "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" = "$(mtd_of $slot)" ] && {
+	case "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" in "$(mtd_of $slot)+"*) {
 		printf '{"slot":%s,"kind":"storage"}\n' "$slot"
 		return 0
-	}
+	} ;; esac
 	mtdn="$(grep "\"$(mtd_of $slot)\"" /proc/mtd | cut -d: -f1 | sed 's/mtd//')"
 	[ -n "$mtdn" ] || { echo '{"error":"no such mtd"}'; return 1; }
 	for n in /sys/class/ubi/ubi[0-9]*; do
@@ -127,6 +128,9 @@ cmd_info() {
 		fi
 		rmdir $mnt 2>/dev/null
 		ubiblock --remove /dev/$vol >/dev/null 2>&1
+	elif [ ! -e /sys/class/ubi/ubi9_0 ] && [ -z "$(ls -d /sys/class/ubi/ubi9_* 2>/dev/null)" ]; then
+		# a UBI with no volumes, as the spare slot is left after storage
+		kind=empty
 	else
 		kind=unknown
 	fi
@@ -188,21 +192,32 @@ cmd_switch() {
 # ---------------------------------------------------------------------------
 # Spare slot as storage
 #
-# The spare slot (40 MiB of NAND) is formatted as UBI with one UBIFS volume,
-# "be7000_storage", and /overlay moves there. The bootloader environment
-# variable be7000_slot_storage names the mtd; /lib/preinit/79_be7000_slot_storage
-# attaches it as ubi2 before mount_root, and fstab (in the slot's own
-# rootfs_data, like extroot) points /overlay at /dev/ubi2_0.
+# The spare slot (40 MiB) and the data partition, mtd "overlay" (28 MiB), are
+# glued into one MTD device by the be7000-mtdconcat kernel module, and one
+# UBI device with one UBIFS volume, "be7000_storage", spans both: about 61 MB
+# for /overlay instead of about 23 MB. The stock settings that shared the
+# data partition are gone with it.
+#
+# Nothing is moved here while the system runs: the data partition cannot be
+# detached while /overlay is mounted from it. These commands check, back up
+# and set the bootloader variable be7000_slot_storage_op;
+# /lib/preinit/77_be7000_slot_storage does the move on the next boot, and
+# sets be7000_slot_storage to "<slot mtd>+overlay" while the mode is on.
+# fstab (in the slot's own rootfs_data, which fstools reads) points /overlay
+# at /dev/ubi2_0.
 #
 # What was in the spare slot (usually the factory firmware) is saved to a
 # file first, byte for byte, and the file is checked against the flash before
-# anything is erased. restore writes it back.
+# anything is erased. restore writes it back once the slot is free again.
 
 STORAGE_VOL=be7000_storage
 ENVVAR=be7000_slot_storage
+OPVAR=be7000_slot_storage_op
 BKDIR=/tmp/be7000-slot-backup
 JOBDIR=/tmp/be7000-slots-job
-STORAGE_MNT=/tmp/be7000-slot-storage
+# what fits: the glued volume, and the data partition alone on the way back
+FIT_GLUED_KB=56000
+FIT_CFG_KB=21000
 
 die() { printf '{"error":"%s"}\n' "$(jstr "$*")"; return 1; }
 
@@ -252,7 +267,9 @@ overlay_kind() {
 	esac
 }
 
-storage_mtd_name() { env "$ENVVAR"; }
+storage_value() { env "$ENVVAR"; }
+storage_mtd_name() { local v; v="$(storage_value)"; echo "${v%%+*}"; }
+storage_op() { env "$OPVAR"; }
 
 # --- fstab in the slot's own rootfs_data (the one fstools reads) -----------
 
@@ -294,22 +311,19 @@ with_rootfs_data() {
 # --- status ------------------------------------------------------------------
 
 cmd_storage_status() {
-	local cur oth name num bytes ubi kind cfg vol=false act=false cap=0 free=0 usedkb=0 usb=false
+	local cur oth name bytes kind cfg act=false cap=0 free=0 usedkb=0
 	cur="$(current)" || { echo '{"error":"no ubi.mtd=rootfs* on the command line"}'; return 1; }
 	oth=$((1 - cur))
 	name="$(mtd_of $oth)"
-	num="$(mtd_num_of "$name")"
 	bytes="$(mtd_bytes_of "$name")"
 	kind="$(overlay_kind)"
-	[ -n "$(storage_mtd_name)" ] && cfg=true || cfg=false
+	[ -n "$(storage_value)" ] && cfg=true || cfg=false
 	[ "$kind" = slotstorage ] && act=true
-	ubi="$(ubi_dev_of_mtd "$num")" && [ -d "/sys/class/ubi/${ubi}_0" ] && vol=true
 	free="$(avail_kb /overlay)"
 	cap="$(df -k /overlay | awk 'END { print $(NF-4) }')"
-	[ -n "$(ls /mnt 2>/dev/null)" ] && usb=true
 	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
-	printf '{"current":%s,"other":%s,"other_mtd":"%s","mtd_bytes":%s,"overlay":"%s","configured":%s,"active":%s,"volume":%s,"capacity_kb":%s,"free_kb":%s,"overlay_used_kb":%s,"backup_dir":"%s"}\n' \
-		"$cur" "$oth" "$name" "${bytes:-0}" "$kind" "$cfg" "$act" "$vol" "${cap:-0}" "${free:-0}" "${usedkb:-0}" "$BKDIR"
+	printf '{"current":%s,"other":%s,"other_mtd":"%s","mtd_bytes":%s,"overlay":"%s","configured":%s,"active":%s,"pending":"%s","capacity_kb":%s,"free_kb":%s,"overlay_used_kb":%s,"fit_cfg_kb":%s,"backup_dir":"%s"}\n' \
+		"$cur" "$oth" "$name" "${bytes:-0}" "$kind" "$cfg" "$act" "$(jstr "$(storage_op)")" "${cap:-0}" "${free:-0}" "${usedkb:-0}" "$FIT_CFG_KB" "$BKDIR"
 }
 
 # --- backup ------------------------------------------------------------------
@@ -327,7 +341,8 @@ cmd_backup() {
 	num="$(mtd_num_of "$name")"
 	bytes="$(mtd_bytes_of "$name")"
 	[ -n "$num" ] && [ -n "$bytes" ] || { die "no mtd $name"; return 1; }
-	[ -n "$(storage_mtd_name)" ] && { die "the spare slot is already storage, there is nothing to back up"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is already storage, there is nothing to back up"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot waits for the reboot"; return 1; }
 	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot is attached, detach it first"; return 1; }
 	mkdir -p "$dir" || { die "cannot create $dir"; return 1; }
 	[ "$(avail_kb "$dir")" -ge 46000 ] 2>/dev/null || { die "less than 45 MB free in $dir"; return 1; }
@@ -389,7 +404,8 @@ cmd_restore() {
 	name="$(mtd_of $oth)"
 	num="$(mtd_num_of "$name")"
 	[ -n "$num" ] || { die "no mtd $name"; return 1; }
-	[ -n "$(storage_mtd_name)" ] && { die "the spare slot is still storage, turn that off and reboot first"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is still storage, give it back and reboot first"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot waits for the reboot"; return 1; }
 	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot is attached"; return 1; }
 	step check "Checking the backup file" 5
 	cmd_backup_check "$f" --file-only >/dev/null || { cmd_backup_check "$f" --file-only; return 1; }
@@ -405,8 +421,35 @@ cmd_restore() {
 
 # --- turn the spare slot into storage --------------------------------------
 
+fstab_slotstorage_batch() {
+	cat <<-EOT
+		set fstab.slotstorage=mount
+		set fstab.slotstorage.target='/overlay'
+		set fstab.slotstorage.device='/dev/ubi2_0'
+		set fstab.slotstorage.fstype='ubifs'
+		set fstab.slotstorage.options='rw,noatime'
+		set fstab.slotstorage.enabled='1'
+		commit fstab
+	EOT
+}
+
+fstab_bigoverlay_batch() {
+	cat <<-EOT
+		delete fstab.slotstorage
+		set fstab.bigoverlay=mount
+		set fstab.bigoverlay.target='/overlay'
+		set fstab.bigoverlay.device='/dev/ubi1_1'
+		set fstab.bigoverlay.fstype='ubifs'
+		set fstab.bigoverlay.options='rw,noatime'
+		set fstab.bigoverlay.enabled='1'
+		commit fstab
+	EOT
+}
+
+# storage-enable (--backup <file> | --empty) --yes: everything checked and
+# set for the move, which preinit does on the next boot
 cmd_storage_enable() {
-	local mode="" f="" yes="" oth name num bytes kind ubi cap usedkb
+	local mode="" f="" yes="" oth name kind src usedkb
 	while [ $# -gt 0 ]; do
 		case "$1" in
 		--backup) mode=backup; f="$2"; shift ;;
@@ -415,147 +458,105 @@ cmd_storage_enable() {
 		esac
 		shift
 	done
-	[ -n "$yes" ] || { die "this erases the spare slot, pass --yes"; return 1; }
+	[ -n "$yes" ] || { die "this erases the spare slot and the data partition, pass --yes"; return 1; }
 	[ -n "$mode" ] || { die "give --backup <file> or --empty"; return 1; }
 	oth="$(other_slot)" || { die "no ubi.mtd=rootfs* on the command line"; return 1; }
 	name="$(mtd_of $oth)"
-	num="$(mtd_num_of "$name")"
-	[ -n "$num" ] || { die "no mtd $name"; return 1; }
-	[ -n "$(storage_mtd_name)" ] && { die "the spare slot is already storage"; return 1; }
-	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot is attached"; return 1; }
+	[ -n "$(mtd_num_of "$name")" ] && [ -n "$(mtd_num_of overlay)" ] || { die "no mtd $name or overlay"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is already storage"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot already waits for the reboot"; return 1; }
+	ubi_dev_of_mtd "$(mtd_num_of "$name")" >/dev/null && { die "the spare slot is attached"; return 1; }
 	case "$(overlay_kind)" in
+	bigoverlay) src=cfg ;;
+	inslot) src=rootfs_data ;;
 	usb) die "/overlay is on a USB disk, which has more room than this would give"; return 1 ;;
-	slotstorage) die "/overlay is already on the spare slot"; return 1 ;;
-	bigoverlay|inslot) ;;
 	*) die "/overlay is on an unexpected device ($(overlay_src))"; return 1 ;;
 	esac
 	[ -e /etc/be7000-test ] && { die "not on a test image"; return 1; }
+	[ -e /rom/lib/modules/"$(uname -r)"/be7000-mtdconcat.ko ] || { die "this image has no be7000-mtdconcat module"; return 1; }
 	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
-	[ "${usedkb:-0}" -lt 24000 ] || { die "the settings and packages in /overlay take $((usedkb / 1024)) MB, that does not fit into the 30 MB the spare slot gives"; return 1; }
+	[ "${usedkb:-0}" -lt "$FIT_GLUED_KB" ] || { die "/overlay holds $((usedkb / 1024)) MB, more than the new volume takes"; return 1; }
 
 	if [ "$mode" = backup ]; then
-		step check "Checking the backup against the flash" 3
+		step check "Checking the backup against the flash" 10
 		cmd_backup_check "$f" >/dev/null || { cmd_backup_check "$f"; return 1; }
 	else
 		kind="$(cmd_info "$oth" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
 		[ "$kind" = empty ] || { die "the spare slot is not empty ($kind), make a backup first"; return 1; }
 	fi
 
-	step erase "Formatting the spare slot" 10
-	ubiformat "/dev/mtd$num" -y -q >&2 || { die "ubiformat failed"; return 1; }
-	ubiattach -m "$num" -d 2 >&2 || { die "ubiattach failed"; return 1; }
-	ubimkvol /dev/ubi2 -N "$STORAGE_VOL" -m >&2 || { ubidetach -d 2 >/dev/null 2>&1; die "ubimkvol failed"; return 1; }
-	mkdir -p "$STORAGE_MNT"
-	mount -t ubifs /dev/ubi2_0 "$STORAGE_MNT" || { ubidetach -d 2 >/dev/null 2>&1; die "mounting the new volume failed"; return 1; }
-	cap="$(avail_kb "$STORAGE_MNT")"
-	if [ "${usedkb:-0}" -ge $((cap * 8 / 10)) ] 2>/dev/null; then
-		umount "$STORAGE_MNT"; ubidetach -d 2 >/dev/null 2>&1
-		die "/overlay holds $((usedkb / 1024)) MB, the new volume has only $((cap / 1024)) MB"
-		return 1
-	fi
-
-	# settings first, so that the copy on the new volume has them too
-	step config "Pointing fstab at the new volume" 40
-	with_rootfs_data <<-EOT || { umount "$STORAGE_MNT"; ubidetach -d 2 >/dev/null 2>&1; die "could not edit fstab"; return 1; }
-		set fstab.slotstorage=mount
-		set fstab.slotstorage.target='/overlay'
-		set fstab.slotstorage.device='/dev/ubi2_0'
-		set fstab.slotstorage.fstype='ubifs'
-		set fstab.slotstorage.options='rw,noatime'
-		set fstab.slotstorage.enabled='1'
-		commit fstab
-	EOT
-	[ "$(overlay_kind)" = inslot ] || uci -q batch <<-EOT
-		set fstab.slotstorage=mount
-		set fstab.slotstorage.target='/overlay'
-		set fstab.slotstorage.device='/dev/ubi2_0'
-		set fstab.slotstorage.fstype='ubifs'
-		set fstab.slotstorage.options='rw,noatime'
-		set fstab.slotstorage.enabled='1'
-		commit fstab
-	EOT
-	# our own bigoverlay hands over (its init script stands down when disabled)
+	step config "Pointing fstab at the new volume" 50
+	fstab_slotstorage_batch | with_rootfs_data || { die "could not edit fstab"; return 1; }
+	# the live settings too, so that the copy preinit makes carries them
+	[ "$(overlay_kind)" = inslot ] || fstab_slotstorage_batch | uci -q batch
 	if [ -n "$(uci -q get fstab.bigoverlay)" ]; then
 		printf "set fstab.bigoverlay.enabled='0'\ncommit fstab\n" | with_rootfs_data
 		[ "$(overlay_kind)" = inslot ] || { uci -q set fstab.bigoverlay.enabled=0; uci -q commit fstab; }
 	fi
 	[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=0; uci -q commit bigoverlay; }
-
-	step copy "Copying /overlay to the new volume" 55
-	mkdir -p "$STORAGE_MNT/upper" "$STORAGE_MNT/work"
-	cp -a /overlay/upper/. "$STORAGE_MNT/upper/" || { storage_undo_config; umount "$STORAGE_MNT"; ubidetach -d 2 >/dev/null 2>&1; die "copying /overlay failed"; return 1; }
-	: > "$STORAGE_MNT/.be7000_slotstorage_ready"
 	sync
-	umount "$STORAGE_MNT"
-	rmdir "$STORAGE_MNT" 2>/dev/null
 
-	step env "Telling the bootloader environment which slot is storage" 90
-	fw_setenv "$ENVVAR" "$name" 2>/dev/null
-	[ "$(storage_mtd_name)" = "$name" ] || { storage_undo_config; die "the bootloader environment did not take $ENVVAR"; return 1; }
-	logger -t be7000-slots "spare slot $oth ($name) is storage, /overlay moves there on the next boot"
-	step done "Done, reboot to switch" 100
-	printf '{"ok":true,"slot":%s,"mtd":"%s","capacity_kb":%s,"reboot":true}\n' "$oth" "$name" "$cap"
+	step env "Telling the next boot to move /overlay" 90
+	fw_setenv "$OPVAR" "enable $name $src" 2>/dev/null
+	[ "$(storage_op)" = "enable $name $src" ] || { storage_undo_config; die "the bootloader environment did not take $OPVAR"; return 1; }
+	logger -t be7000-slots "slot $oth ($name) and the data partition become /overlay on the next boot"
+	step done "Done, reboot to move /overlay" 100
+	printf '{"ok":true,"slot":%s,"mtd":"%s","reboot":true}\n' "$oth" "$name"
 }
 
+# the settings made for a move that has not happened, taken back
 storage_undo_config() {
-	printf "delete fstab.slotstorage\ncommit fstab\n" | with_rootfs_data
-	uci -q delete fstab.slotstorage
-	[ -n "$(uci -q get fstab.bigoverlay)" ] && {
-		printf "set fstab.bigoverlay.enabled='1'\ncommit fstab\n" | with_rootfs_data
-		uci -q set fstab.bigoverlay.enabled=1
-	}
-	uci -q commit fstab
-	[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
+	if [ "$(overlay_kind)" = bigoverlay ]; then
+		fstab_bigoverlay_batch | with_rootfs_data
+		fstab_bigoverlay_batch | uci -q batch
+		[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
+	else
+		printf "delete fstab.slotstorage\ncommit fstab\n" | with_rootfs_data
+		uci -q delete fstab.slotstorage
+		uci -q commit fstab
+	fi
+	sync
 }
 
-# storage-disable --yes: put /overlay back on the shared volume (bigoverlay) or
-# the slot's own rootfs_data, and drop the bootloader variable. The slot itself
-# can only be wiped or restored after the reboot that follows: it cannot be
-# detached while /overlay lives on it.
+# storage-disable --yes: /overlay goes back to the data partition on the next
+# boot, and the spare slot is left empty
 cmd_storage_disable() {
-	local yes="$1" big dev usedkb free
+	local yes="$1" usedkb
 	[ "$yes" = "--yes" ] || { die "pass --yes"; return 1; }
-	[ -n "$(storage_mtd_name)" ] || { die "the spare slot is not storage"; return 1; }
+	[ -n "$(storage_value)" ] || { die "the spare slot is not storage"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot already waits for the reboot"; return 1; }
 	[ "$(overlay_kind)" = slotstorage ] || { die "/overlay is not on the spare slot right now, reboot first"; return 1; }
-	big=""
-	for dev in /dev/ubi1_*; do
-		[ -e "$dev" ] || continue
-		big="$dev"
-		break
-	done
 	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
-	if [ -n "$big" ]; then
-		step copy "Copying /overlay to the shared volume" 20
-		mkdir -p /tmp/be7000-back
-		mount -t ubifs "$big" /tmp/be7000-back || { die "cannot mount $big"; return 1; }
-		free="$(avail_kb /tmp/be7000-back)"
-		# what is in upper/ there now is stale: it is the pre-move copy
-		if [ "${usedkb:-0}" -ge "${free:-0}" ] 2>/dev/null; then
-			umount /tmp/be7000-back
-			die "/overlay holds $((usedkb / 1024)) MB, the shared volume has about $((free / 1024)) MB free, remove packages first"
-			return 1
-		fi
-		rm -rf /tmp/be7000-back/upper /tmp/be7000-back/work
-		mkdir -p /tmp/be7000-back/upper /tmp/be7000-back/work
-		cp -a /overlay/upper/. /tmp/be7000-back/upper/ || { umount /tmp/be7000-back; die "copy failed"; return 1; }
-		: > /tmp/be7000-back/.bigoverlay_migrated
-		sync
-		umount /tmp/be7000-back
-		rmdir /tmp/be7000-back 2>/dev/null
-	fi
-	step config "Restoring fstab" 70
-	printf "delete fstab.slotstorage\ncommit fstab\n" | with_rootfs_data
-	uci -q delete fstab.slotstorage; uci -q commit fstab
-	if [ -n "$big" ] && [ -n "$(uci -q get fstab.bigoverlay)" ]; then
-		printf "set fstab.bigoverlay.enabled='1'\ncommit fstab\n" | with_rootfs_data
-		uci -q set fstab.bigoverlay.enabled=1; uci -q commit fstab
-		[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
-	fi
-	fw_setenv "$ENVVAR" 2>/dev/null
-	[ -z "$(storage_mtd_name)" ] || { die "could not clear $ENVVAR"; return 1; }
-	logger -t be7000-slots "spare slot storage turned off, /overlay moves back on the next boot"
-	step done "Done, reboot to switch back" 100
-	printf '{"ok":true,"reboot":true,"to":"%s"}\n' "$([ -n "$big" ] && echo bigoverlay || echo inslot)"
+	[ "${usedkb:-0}" -lt "$FIT_CFG_KB" ] || { die "/overlay holds $((usedkb / 1024)) MB, the data partition alone takes about $((FIT_CFG_KB / 1024)) MB, remove packages first"; return 1; }
+	step config "Pointing fstab back at the data partition" 40
+	fstab_bigoverlay_batch | with_rootfs_data || { die "could not edit fstab"; return 1; }
+	fstab_bigoverlay_batch | uci -q batch
+	[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
+	sync
+	step env "Telling the next boot to move /overlay back" 90
+	fw_setenv "$OPVAR" disable 2>/dev/null
+	[ "$(storage_op)" = disable ] || {
+		fstab_slotstorage_batch | with_rootfs_data
+		fstab_slotstorage_batch | uci -q batch
+		die "the bootloader environment did not take $OPVAR"
+		return 1
+	}
+	logger -t be7000-slots "/overlay goes back to the data partition on the next boot"
+	step done "Done, reboot to move /overlay back" 100
+	printf '{"ok":true,"reboot":true}\n'
+}
+
+# storage-cancel: drop a move that waits for the reboot
+cmd_storage_cancel() {
+	case "$(storage_op)" in
+	enable*) storage_undo_config ;;
+	disable) fstab_slotstorage_batch | with_rootfs_data; fstab_slotstorage_batch | uci -q batch
+		[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=0; uci -q commit bigoverlay; } ;;
+	"") die "nothing waits for the reboot"; return 1 ;;
+	esac
+	fw_setenv "$OPVAR" 2>/dev/null
+	[ -z "$(storage_op)" ] || { die "could not clear $OPVAR"; return 1; }
+	echo '{"ok":true}'
 }
 
 # --- long commands run in the background -----------------------------------
@@ -610,7 +611,8 @@ backup-check) shift; cmd_backup_check "$@" ;;
 restore) shift; cmd_restore "$@" ;;
 storage-enable) shift; cmd_storage_enable "$@" ;;
 storage-disable) shift; cmd_storage_disable "$@" ;;
+storage-cancel) cmd_storage_cancel ;;
 job-start) shift; cmd_job_start "$@" ;;
 job-status) cmd_job_status ;;
-*) echo "usage: $0 status | info <0|1> | switch <0|1> | storage-status | backup | backup-check | restore | storage-enable | storage-disable | job-start | job-status" >&2; exit 1 ;;
+*) echo "usage: $0 status | info <0|1> | switch <0|1> | storage-status | storage-name | backup | backup-check | restore | storage-enable | storage-disable | storage-cancel | job-start | job-status" >&2; exit 1 ;;
 esac

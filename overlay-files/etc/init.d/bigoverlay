@@ -184,6 +184,9 @@ make_volume() {
 }
 
 boot() {
+	# the data partition is glued to the spare slot as /overlay (System,
+	# Slots): there is no ubi1, and making one would wipe /overlay
+	grep -q '"be7000_concat"' /proc/mtd && return 0
 	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
 	# a local test build runs on a private copy of the shared volume (see
 	# /lib/preinit/78_be7000_overlay_refresh) and must not switch to it

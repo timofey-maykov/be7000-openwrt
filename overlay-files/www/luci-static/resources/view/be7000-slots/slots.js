@@ -198,20 +198,29 @@ return view.extend({
 			return E('div', { 'class': 'cbi-section' }, [ E('h3', {}, _('Второй слот под пакеты')), body ]);
 		}
 
-		body.appendChild(E('p', { 'class': 'bs-note' }, _('Второй слот можно отдать под /overlay, то есть под пакеты и настройки. Места станет около 33 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно.').format(oth)));
+		body.appendChild(E('p', { 'class': 'bs-note' }, _('Второй слот и раздел данных можно склеить в один раздел под /overlay, то есть под пакеты и настройки. Места станет около 61 МБ вместо 23. Цена: в слоте %d больше не будет запасной прошивки, и настройки заводской прошивки на разделе данных сотрутся. Вернуться на заводскую прошивку или на прошлую версию Beam WRT переключением слота не получится, пока слот не вернёте. Обновления Beam WRT работают как обычно.').format(oth)));
 		body.appendChild(E('p', { 'class': 'bs-note' }, _('Сейчас /overlay %s, свободно %s МБ из %s МБ.').format(this.overlayWhere(ss.overlay), this.mb(ss.free_kb), this.mb(ss.capacity_kb))));
 
-		if (ss.configured && ss.active) {
-			body.appendChild(E('p', { 'class': 'bs-note' }, _('Слот %d отдан под пакеты.').format(oth)));
+		if (ss.pending) {
+			body.appendChild(E('p', { 'class': 'alert-message warning' }, ss.pending.indexOf('enable') == 0
+				? _('Всё готово к переносу. /overlay переедет на склеенный раздел при следующей загрузке, она займёт на полминуты дольше обычного.')
+				: _('Всё готово к возврату. /overlay вернётся на раздел данных при следующей загрузке, слот %d станет пустым.').format(oth)));
 			body.appendChild(E('div', { 'class': 'bs-row' }, [
-				E('button', { 'class': 'cbi-button cbi-button-negative', 'click': ui.createHandlerFn(this, 'askDisable') }, _('Вернуть второй слот'))
+				E('button', { 'class': 'cbi-button cbi-button-action important', 'click': ui.createHandlerFn(this, 'reboot') }, _('Перезагрузить')),
+				E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, 'cancelPending') }, _('Отменить'))
+			]));
+		}
+		else if (ss.configured && ss.active) {
+			body.appendChild(E('p', { 'class': 'bs-note' }, _('Слот %d и раздел данных отданы под пакеты.').format(oth)));
+			var fits = (+ss.overlay_used_kb || 0) < (+ss.fit_cfg_kb || 0);
+			if (!fits)
+				body.appendChild(E('p', { 'class': 'bs-note' }, _('Сейчас в /overlay %s МБ, а на разделе данных помещается около %s МБ. Чтобы вернуть слот, сначала удалите лишние пакеты.').format(this.mb(ss.overlay_used_kb), this.mb(ss.fit_cfg_kb))));
+			body.appendChild(E('div', { 'class': 'bs-row' }, [
+				E('button', { 'class': 'cbi-button cbi-button-negative', 'disabled': !fits, 'click': ui.createHandlerFn(this, 'askDisable') }, _('Вернуть второй слот'))
 			]));
 		}
 		else if (ss.configured) {
-			body.appendChild(E('p', { 'class': 'alert-message warning' }, _('Слот %d подготовлен под пакеты. /overlay переедет туда после перезагрузки.').format(oth)));
-			body.appendChild(E('div', { 'class': 'bs-row' }, [
-				E('button', { 'class': 'cbi-button cbi-button-action important', 'click': ui.createHandlerFn(this, 'reboot') }, _('Перезагрузить'))
-			]));
+			body.appendChild(E('p', { 'class': 'alert-message warning' }, _('Слот %d отдан под пакеты, но подключить его при загрузке не получилось, /overlay сейчас временный. Посмотрите системный журнал, строки be7000 slot storage.').format(oth)));
 		}
 		else if (ss.overlay == 'usb') {
 			body.appendChild(E('p', { 'class': 'bs-note' }, _('/overlay сейчас на USB-диске, места там больше. Этот режим не нужен.')));
@@ -253,6 +262,14 @@ return view.extend({
 		return E('div', { 'class': 'cbi-section' }, [ E('h3', {}, _('Второй слот под пакеты')), body ]);
 	},
 
+	cancelPending: function() {
+		return L.resolveDefault(callJob('cancel', ''), {}).then(function(r) {
+			if (!r || !r.ok)
+				ui.addNotification(null, E('p', {}, (r && r.error) || _('не получилось')), 'error');
+			window.location.reload();
+		});
+	},
+
 	download: function(path) {
 		return fs.read_direct(path, 'blob').then(function(blob) {
 			var a = E('a', { 'href': URL.createObjectURL(blob), 'download': path.replace(/^.*\//, ''), 'style': 'display:none' });
@@ -277,6 +294,8 @@ return view.extend({
 			E('p', {}, cmd == 'enable-backup'
 				? _('Слот %d будет стёрт. Перед этим роутер ещё раз сверит копию с флешем. Убедитесь, что оба файла копии скачаны: после перезагрузки их на роутере не будет.').format(oth)
 				: _('Слот %d будет стёрт. Если в нём есть прошивка, роутер откажется и попросит сделать копию.').format(oth)),
+			E('p', {}, _('Раздел данных тоже будет отформатирован. Настройки и пакеты Beam WRT роутер перенесёт сам, а настройки заводской прошивки там пропадут.')),
+			E('p', {}, _('Сам перенос происходит при следующей загрузке, до запуска системы.')),
 			E('p', {}, _('После этого откатиться на прошивку из слота %d нельзя, пока слот не вернёте и не запишете копию обратно.').format(oth)),
 			E('p', {}, [ ok, ' ', E('label', { 'for': 'bs-ok' }, _('Понимаю, отката на второй слот не будет')) ]),
 			E('div', { 'class': 'right' }, [ E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Отмена')), ' ', btn ])
@@ -285,8 +304,8 @@ return view.extend({
 
 	askDisable: function() {
 		ui.showModal(_('Вернуть второй слот?'), [
-			E('p', {}, _('/overlay вернётся на раздел данных (около 23 МБ). Если пакеты и настройки туда не помещаются, роутер откажется, тогда сначала удалите лишние пакеты.')),
-			E('p', {}, _('После перезагрузки второй слот будет свободен. В него можно вернуть копию на этой странице или поставить прошивку.')),
+			E('p', {}, _('/overlay вернётся на раздел данных (около 23 МБ), это происходит при следующей загрузке.')),
+			E('p', {}, _('После перезагрузки второй слот будет пустым. В него можно вернуть копию на этой странице или поставить прошивку.')),
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, _('Отмена')), ' ',
 				E('button', { 'class': 'cbi-button cbi-button-negative important', 'click': L.bind(function() {
@@ -341,7 +360,7 @@ return view.extend({
 					if (s.state == 'done') {
 						if (offerReboot) {
 							ui.showModal(title, [
-								E('p', {}, _('Готово. /overlay переедет после перезагрузки.')),
+								E('p', {}, _('Готово. Перенос произойдёт при следующей загрузке.')),
 								E('div', { 'class': 'right' }, [
 									E('button', { 'class': 'cbi-button', 'click': function() { ui.hideModal(); window.location.reload(); } }, _('Позже')), ' ',
 									E('button', { 'class': 'cbi-button cbi-button-action important', 'click': ui.createHandlerFn(this, 'reboot') }, _('Перезагрузить'))
