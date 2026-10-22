@@ -42,6 +42,8 @@ awg-proto-feed
 awg-proto-feed/luci-proto-amneziawg
 beam-apps-feed
 beam-apps-feed/zapret-manager-beam
+beam-apps-feed/kmod-be7000-mtdconcat
+beam-apps-feed/kmod-be7000-mtdconcat/src
 i18n
 luci-theme-nimbus
 luci-theme-nimbus/htdocs

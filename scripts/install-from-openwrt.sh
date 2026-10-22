@@ -74,6 +74,8 @@ CUR="$(current)" || die "this system does not run from a NAND slot (USB or kexec
 OTHER=$((1 - CUR))
 OMTD="$(grep "\"$(mtd_of $OTHER)\"" /proc/mtd | cut -d: -f1 | sed 's/mtd//')"
 [ -n "$OMTD" ] || die "no mtd for slot $OTHER"
+case "$(env_get be7000_slot_storage)" in "$(mtd_of $OTHER)+"*) false ;; esac ||
+	die "slot $OTHER holds /overlay (System, Slots), give it back there first"
 for n in /sys/class/ubi/ubi[0-9]*; do
 	[ "$(cat $n/mtd_num 2>/dev/null)" = "$OMTD" ] && die "slot $OTHER is attached (in use), stop"
 done
