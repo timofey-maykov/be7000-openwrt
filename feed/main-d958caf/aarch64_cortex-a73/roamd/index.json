@@ -4,6 +4,6 @@
   "packages": {
     "luci-app-roamd": "1.2.0-r1",
     "luci-i18n-roamd-ru": "1.2.0-r1",
-    "roamd": "1.2.0-r2"
+    "roamd": "1.2.0_p1-r2"
   }
 }
