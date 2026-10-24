@@ -43,6 +43,8 @@ return {
 		status: query('status'),
 		check: query('check'),
 		download: query('download'),
+		download_start: query('download-start'),
+		download_status: query('download-status'),
 		// the daily check on or off, answers with the fresh status
 		autocheck_set: {
 			args: { on: false },

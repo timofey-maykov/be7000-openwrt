@@ -3,12 +3,12 @@
 		"description": "Check for and install firmware updates from GitHub",
 		"read": {
 			"ubus": {
-				"be7000-update": [ "status", "check", "log" ]
+				"be7000-update": [ "status", "check", "log", "download_status" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"be7000-update": [ "download", "apply", "autocheck_set" ]
+				"be7000-update": [ "download", "download_start", "apply", "autocheck_set" ]
 			}
 		}
 	}

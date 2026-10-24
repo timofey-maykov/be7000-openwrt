@@ -430,3 +430,31 @@ jobs:
                    --title "Beam WRT $VER" "${args[@]}" "${assets[@]}" ;;
             esac
           fi
+
+      # be7000-update fetches the image from GitHub Pages first: github.com
+      # itself is often slow or unreachable from where the routers are, the
+      # Pages host that already serves the package feed usually is not. Keep
+      # the three newest releases there.
+      - name: Mirror the image on GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mirror
+          cd mirror
+          git sparse-checkout set --no-cone /firmware/
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          tag="${{ github.ref_name }}"
+          for i in 1 2 3 4 5; do
+            git fetch -q --filter=blob:none --depth 1 origin gh-pages
+            git checkout -q -B gh-pages FETCH_HEAD
+            mkdir -p "firmware/$tag"
+            cp "../out/$DEVICE-squashfs-sysupgrade.bin" ../out/sha256sums.txt "firmware/$tag/"
+            ls -d firmware/v* | sort -V | head -n -3 | xargs -r git rm -rq
+            git add -A firmware
+            git diff --cached --quiet && exit 0
+            git commit -q -m "firmware: $tag image mirror"
+            git push -q origin gh-pages && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

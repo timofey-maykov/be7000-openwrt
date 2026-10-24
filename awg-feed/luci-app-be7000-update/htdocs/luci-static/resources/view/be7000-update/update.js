@@ -14,7 +14,8 @@
 
 var callStatus = rpc.declare({ object: 'be7000-update', method: 'status' });
 var callCheck = rpc.declare({ object: 'be7000-update', method: 'check' });
-var callDownload = rpc.declare({ object: 'be7000-update', method: 'download' });
+var callDownloadStart = rpc.declare({ object: 'be7000-update', method: 'download_start' });
+var callDownloadStatus = rpc.declare({ object: 'be7000-update', method: 'download_status' });
 var callApply = rpc.declare({ object: 'be7000-update', method: 'apply' });
 var callLog = rpc.declare({ object: 'be7000-update', method: 'log' });
 var callAutoSet = rpc.declare({ object: 'be7000-update', method: 'autocheck_set', params: [ 'on' ] });
@@ -151,17 +152,39 @@ return view.extend({
 			return;
 		var btn = ev.target;
 		btn.disabled = true;
+		var label = _('Скачиваю образ и проверяю сумму. Не выключайте роутер.');
+		var text = E('p', { 'class': 'spinning' }, label);
 		ui.showModal(_('Обновление'), [
-			E('p', { 'class': 'spinning' }, _('Скачиваю образ и проверяю сумму. Не выключайте роутер.')),
+			text,
 			E('pre', { 'id': 'be7000-update-log', 'style': 'max-height:14em;overflow:auto' }, '')
 		]);
-		return callDownload().then(function(res) {
-			if (!res || res.ok === false) {
-				ui.hideModal();
-				ui.addNotification(null, E('p', (res && res.error) || _('не удалось скачать образ')), 'error');
-				btn.disabled = false;
-				return;
-			}
+		var fail = function(msg) {
+			ui.hideModal();
+			ui.addNotification(null, E('p', msg || _('не удалось скачать образ')), 'error');
+			btn.disabled = false;
+		};
+		var later = function(ms) { return new Promise(function(r) { window.setTimeout(r, ms); }); };
+		// the download runs in the background on the router: on a slow link to
+		// GitHub it takes longer than one rpc call may last
+		var misses = 0;
+		var wait = function() {
+			return callDownloadStatus().then(function(s) {
+				misses = 0;
+				if (s && s.running) {
+					if (s.total > 0 && s.bytes > 0)
+						text.textContent = label + ' (' + mb(s.bytes) + ' / ' + mb(s.total) + ')';
+					return later(2000).then(wait);
+				}
+				if (!s || !s.ok)
+					return fail(s && s.error);
+				return install();
+			}, function(e) {
+				if (++misses > 10)
+					return fail(e && e.message);
+				return later(3000).then(wait);
+			});
+		};
+		var install = function() {
 			return callApply().then(function() {
 				var logEl = document.getElementById('be7000-update-log');
 				var tries = 0;
@@ -180,7 +203,8 @@ return view.extend({
 					});
 				}, 3);
 			});
-		});
+		};
+		return callDownloadStart().then(wait, function(e) { fail(e && e.message); });
 	},
 
 	render: function(st) {

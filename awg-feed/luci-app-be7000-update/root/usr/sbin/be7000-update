@@ -148,13 +148,58 @@ do_download() {
 	local free
 	free=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 	[ "${free:-0}" -gt 120 ] || fail "$(t "мало свободной памяти для загрузки образа: ${free} МБ" "not enough free memory to download the image: ${free} MB")"
-	fetch "$sums" "$SUMS" || fail "$(t "не удалось скачать sha256sums.txt" "could not download sha256sums.txt")"
-	fetch "$url" "$IMG" || { rm -f "$IMG"; fail "$(t "не удалось скачать образ" "could not download the image")"; }
+	# The release files are also mirrored on the project's GitHub Pages next
+	# to the package feed. github.com itself is often slow or unreachable from
+	# where the routers are, the Pages host usually is not, so try it first.
+	local tag mirror
+	tag=$(jsonfilter -i "$STATE" -e '@.tag')
+	mirror="https://${REPO%%/*}.github.io/${REPO#*/}/firmware/$tag"
+	if fetch "$mirror/sha256sums.txt" "$SUMS" && fetch "$mirror/${url##*/}" "$IMG"; then
+		:
+	else
+		rm -f "$IMG"
+		fetch "$sums" "$SUMS" || fail "$(t "не удалось скачать sha256sums.txt" "could not download sha256sums.txt")"
+		fetch "$url" "$IMG" || { rm -f "$IMG"; fail "$(t "не удалось скачать образ" "could not download the image")"; }
+	fi
 	local want got
 	want=$(grep -- '-squashfs-sysupgrade\.bin' "$SUMS" | awk '{print $1}')
 	got=$(sha256sum "$IMG" | awk '{print $1}')
 	[ -n "$want" ] && [ "$want" = "$got" ] || { rm -f "$IMG"; fail "$(t "контрольная сумма не совпала" "checksum mismatch")"; }
 	echo "$got" >"$DIR/verified"
+}
+
+# The download takes longer than an rpc call may last on a slow link to
+# GitHub (uhttpd gives up after 60 s), so the page starts it in the
+# background and polls how far it got.
+print_download() {
+	local running=false ok=false err="" bytes=0 total
+	total=$(jsonfilter -i "$STATE" -e '@.image_size' 2>/dev/null)
+	[ -f "$IMG" ] && bytes=$(wc -c <"$IMG")
+	if [ -f "$DIR/dl.pid" ] && kill -0 "$(cat "$DIR/dl.pid")" 2>/dev/null; then
+		running=true
+	elif [ -f "$DIR/dl.rc" ]; then
+		if [ "$(cat "$DIR/dl.rc")" = 0 ]; then
+			ok=true
+		else
+			err=$(jsonfilter -i "$DIR/dl.out" -e '@.error' 2>/dev/null)
+			[ -n "$err" ] || err=$(tail -n 3 "$DIR/dl.out" 2>/dev/null)
+		fi
+	fi
+	printf '{"running":%s,"ok":%s,"error":"%s","bytes":%s,"total":%s}\n' \
+		$running $ok "$(json_escape "$err")" "${bytes:-0}" "${total:-0}"
+}
+
+download_start() {
+	mkdir -p "$DIR"
+	if [ -f "$DIR/dl.pid" ] && kill -0 "$(cat "$DIR/dl.pid")" 2>/dev/null; then
+		print_download
+		return
+	fi
+	rm -f "$DIR/dl.rc" "$DIR/dl.out"
+	( "$0" download --json >"$DIR/dl.out" 2>&1; echo $? >"$DIR/dl.rc"; rm -f "$DIR/dl.pid" ) \
+		</dev/null >/dev/null 2>&1 &
+	echo $! >"$DIR/dl.pid"
+	print_download
 }
 
 downloaded_ok() {
@@ -246,6 +291,10 @@ check)
 	do_check; print_status ;;
 download)
 	do_download; print_status ;;
+download-start)
+	download_start ;;
+download-status)
+	print_download ;;
 autocheck)
 	case "$2" in
 	on|off)
@@ -274,5 +323,5 @@ apply)
 	t "запускаю sysupgrade, связь пропадёт на пару минут" "starting sysupgrade, the connection drops for a couple of minutes" | tee -a "$LOG"
 	exec sysupgrade -v "$IMG" ;;
 *)
-	echo "usage: be7000-update status|check|download|apply|autocheck [on|off]|watch [--json] [--yes]" >&2; exit 2 ;;
+	echo "usage: be7000-update status|check|download|download-start|download-status|apply|autocheck [on|off]|watch [--json] [--yes]" >&2; exit 2 ;;
 esac
