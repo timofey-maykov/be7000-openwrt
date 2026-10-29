@@ -1304,3 +1304,6 @@ msgstr "Slot %d and the data partition are given over to packages."
 
 msgid "Слот %d отдан под пакеты, но подключить его при загрузке не получилось, /overlay сейчас временный. Посмотрите системный журнал, строки be7000 slot storage."
 msgstr "Slot %d is given over to packages, but attaching it at boot failed, /overlay is temporary now. See the system log, lines with be7000 slot storage."
+
+msgid "Это сборка roamd от Ground-Zerro под BE7000. Скрипт установки из его репозитория на этот роутер не подходит, ставьте кнопкой выше."
+msgstr "This is Ground-Zerro's roamd built for the BE7000. The install script from his repository does not fit this router, use the button above."

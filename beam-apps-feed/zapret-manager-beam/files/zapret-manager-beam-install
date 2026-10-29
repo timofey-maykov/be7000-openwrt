@@ -2,7 +2,7 @@
 
 set -eu
 
-if [ ! -f /etc/be7000-release ] || ! grep -q "^DISTRIB_ID='Beam WRT'" /etc/openwrt_release 2>/dev/null; then
+if [ ! -f /etc/be7000-release ] || ! grep -qE "^DISTRIB_(ID|DESCRIPTION)='Beam WRT" /etc/openwrt_release 2>/dev/null; then
 	echo "This package is only for Beam WRT" >&2
 	exit 1
 fi

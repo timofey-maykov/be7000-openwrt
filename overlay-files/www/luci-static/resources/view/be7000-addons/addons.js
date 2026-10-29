@@ -225,10 +225,7 @@ return view.extend({
 				]),
 				!rdFeed ? E('div', { 'class': 'ba-note' }, _('Пакет пока не найден в фиде. Сначала нужно опубликовать новую сборку фида.')) : '',
 				rdLog,
-				E('div', { 'class': 'ba-note' }, [
-					_('Исходный проект'), ' ',
-					E('a', { 'href': 'https://github.com/Ground-Zerro/roamd', 'target': '_blank', 'rel': 'noopener' }, 'Ground-Zerro/roamd')
-				])
+				E('div', { 'class': 'ba-note' }, _('Это сборка roamd от Ground-Zerro под BE7000. Скрипт установки из его репозитория на этот роутер не подходит, ставьте кнопкой выше.'))
 			]),
 
 			E('div', { 'class': 'ba-card' }, [
