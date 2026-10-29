@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.2**, October 29, 2026.
+- After an update the flash drive comes up right away again. In 1.5.1 the router reboots once by itself after an update, and the new protection took that reboot for a failure and started the system without USB. Packages from the drive showed up only after one more reboot.
+- Release 1.5.1 was withdrawn, everything from it is in 1.5.2.
+
 **1.5.1**, October 29, 2026.
 - When a flash drive with extroot starts dying, the router no longer ends up on the stock firmware. Before, every boot with such a drive broke off, and after six tries the bootloader switched to stock. Now, if the previous boot did not finish, the router starts without USB on its built-in storage and stays reachable.
 - Install scripts of third-party packages no longer complain about the version. To them the firmware is now OpenWrt 25.12.6, while Beam WRT and its number show in the description, the banner and LuCI.
