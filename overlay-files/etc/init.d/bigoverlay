@@ -160,6 +160,18 @@ switch_reboot() {
 	if [ "$(fw_printenv -n flag_ota_reboot 2>/dev/null)" = "1" ]; then
 		fw_setenv flag_boot_success 1 || logger -t bigoverlay "could not re-arm flag_boot_success"
 	fi
+	# The bootloader counted this boot and bootconfirm will not get to zero
+	# it before the reboot. Left at 1 it reads as 2 on the next boot, and
+	# 76_be7000_extroot_guard takes that for a boot that broke off and starts
+	# without USB. This reboot is planned and the tries counter above keeps it
+	# from looping, so the slot's counter goes back to zero here.
+	local arg
+	for arg in $(cat /proc/cmdline); do
+		case "$arg" in
+		ubi.mtd=rootfs)   fw_setenv flag_try_sys1_failed 0 ;;
+		ubi.mtd=rootfs_1) fw_setenv flag_try_sys2_failed 0 ;;
+		esac
+	done
 	logger -t bigoverlay "$why, rebooting to switch /overlay over"
 	sync
 	reboot
