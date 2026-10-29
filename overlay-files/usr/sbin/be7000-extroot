@@ -345,6 +345,7 @@ cmd_boot_sync() {
 			touch "$marker"
 			sync
 			logger -t be7000-extroot "fstab was restored after early boot, rebooting once to use the configured overlay"
+			. /lib/functions/be7000-bootcount.sh && be7000_bootcount_clear
 			( sleep 5; reboot ) </dev/null >/dev/null 2>&1 &
 		fi
 		return 0
@@ -399,6 +400,7 @@ cmd_boot_sync() {
 
 	if [ "$changed" = 1 ] && [ "${en:-1}" = 1 ] && block info 2>/dev/null | grep -q "UUID=\"$uuid\""; then
 		logger -t be7000-extroot "the disk is here, rebooting once to put /overlay on it"
+		. /lib/functions/be7000-bootcount.sh && be7000_bootcount_clear
 		( sleep 5; reboot ) </dev/null >/dev/null 2>&1 &
 	fi
 	return 0
