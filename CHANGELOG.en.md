@@ -2,6 +2,13 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.1**, October 29, 2026.
+- When a flash drive with extroot starts dying, the router no longer ends up on the stock firmware. Before, every boot with such a drive broke off, and after six tries the bootloader switched to stock. Now, if the previous boot did not finish, the router starts without USB on its built-in storage and stays reachable.
+- Install scripts of third-party packages no longer complain about the version. To them the firmware is now OpenWrt 25.12.6, while Beam WRT and its number show in the description, the banner and LuCI.
+- The update page downloads the image in the background, shows how much is in, and takes the image from a mirror on GitHub Pages. Before, on a slow link to GitHub the dialog spun forever.
+- roamd: a BE7000 node with Beam WRT gets roamd from the controller, there is no need to install it on the node by hand.
+- The SSH login banner shows the version and the thanks again.
+
 **1.5.0**, October 23, 2026.
 - Fixed a bug that sometimes kept routers from the latest batches from booting after an install or a reboot, with the indicator staying orange.
 - On the System, Slots page the second slot can be given over to packages. It is joined with the settings partition, and packages get about 57 MB instead of 20. Before that the router saves a copy of the slot, which brings the slot back.
