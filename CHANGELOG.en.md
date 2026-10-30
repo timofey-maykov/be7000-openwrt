@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.3**, October 30, 2026.
+- Fixed updating when the second slot is used for packages. After an update the joined volume stayed intact and attached, but the named `fstab.slotstorage` entry could be absent, so the router started on the current slot's small `rootfs_data`. On the first boot of the new version, preinit checks and restores the entry when needed before `mount_root` runs. `fstab` is also in the explicit keep list for later updates.
+- If the entry cannot be checked or restored, the joined volume is detached and the router safely continues booting on `rootfs_data`.
+
 **1.5.2**, October 29, 2026.
 - After an update the flash drive comes up right away again. In 1.5.1 the router reboots once by itself after an update, and the new protection took that reboot for a failure and started the system without USB. Packages from the drive showed up only after one more reboot.
 - Release 1.5.1 was withdrawn, everything from it is in 1.5.2.
