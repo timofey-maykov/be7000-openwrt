@@ -107,9 +107,59 @@ s77_fstab_slotstorage() {
 		set fstab.slotstorage.fstype='ubifs'
 		set fstab.slotstorage.options='rw,noatime'
 		set fstab.slotstorage.enabled='1'
+		set fstab.bigoverlay=mount
 		set fstab.bigoverlay.enabled='0'
 		commit fstab
 	EOT
+}
+
+# A sysupgrade normally preserves /etc/config/fstab, but do not leave the
+# glued volume unused if that named section is missing or damaged. Read the
+# new slot's rootfs_data without changing it first; only rewrite the file when
+# every value fstools needs is not already there.
+s77_slotstorage_fstab_ok() {
+	local c="$1" big
+	[ -f "$c/fstab" ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage)" = mount ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage.target)" = /overlay ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage.device)" = /dev/ubi2_0 ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage.fstype)" = ubifs ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage.options)" = rw,noatime ] || return 1
+	[ "$(uci -q -c "$c" get fstab.slotstorage.enabled)" = 1 ] || return 1
+	big=$(uci -q -c "$c" get fstab.bigoverlay.enabled)
+	[ -z "$big" ] || [ "$big" = 0 ]
+}
+
+s77_ensure_slotstorage_fstab() {
+	local dev c
+	# The bootloader flag alone is not enough to write a mount entry: verify
+	# that the expected named volume is really attached at the expected node.
+	[ "$(s77_vol ubi2 "$VOL")" = /dev/ubi2_0 ] || return 1
+	dev=$(s77_vol ubi0 rootfs_data) || return 1
+	mkdir -p "$S/rd"
+	mount -t ubifs -o ro "$dev" "$S/rd" || return 1
+	c="$S/rd/upper/etc/config"
+	if s77_slotstorage_fstab_ok "$c"; then
+		umount "$S/rd"
+		return $?
+	fi
+	umount "$S/rd" || return 1
+	if s77_fstab_slotstorage; then
+		s77_log "restored the missing or damaged fstab entry for /dev/ubi2_0"
+		return 0
+	fi
+	return 1
+}
+
+s77_prepare_slotstorage_fstab() {
+	s77_ensure_slotstorage_fstab && return 0
+	s77_log "could not verify or restore the fstab entry for slot storage, /overlay falls back to rootfs_data"
+	if ! s77_concat_down; then
+		s77_log "could not detach the unusable slot storage volume"
+	fi
+	# A damaged or unavailable glued volume must never stop mount_root from
+	# using the current slot's rootfs_data as its safe fallback.
+	return 0
 }
 
 # glue <slot mtd> and the data partition, attach the result as ubi2
@@ -309,8 +359,10 @@ be7000_slot_storage() {
 		num=$(s77_concat_up "$slot")
 		if [ -z "$num" ] || ! ubiattach -m "$num" -d 2 >/dev/null 2>&1; then
 			s77_log "could not attach $slot with the data partition, /overlay falls back to rootfs_data"
+		else
+			s77_nodes ubi2
+			s77_prepare_slotstorage_fstab
 		fi
-		s77_nodes ubi2
 		;;
 	esac
 	rm -f $FWCFG
