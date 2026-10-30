@@ -1,4 +1,4 @@
-Beam WRT 1.4 for the Xiaomi BE7000
+Beam WRT 1.5.4 for the Xiaomi BE7000
 
 This is firmware based on OpenWrt with kernel 6.18. The instructions come in parts, read the one that fits your case.
 

@@ -395,9 +395,11 @@ jobs:
           sha256sum "$DEVICE-squashfs-factory.ubi" "$DEVICE-squashfs-sysupgrade.bin" > sha256sums.txt
           cp "$DEVICE-squashfs-factory.ubi" ../repo/scripts/install-from-stock.sh ../repo/scripts/install-from-openwrt.sh \
              ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
-          # the index's first line carries the version
-          sed -i "1s/версия [0-9][0-9.]*/версия $VER/" zip/instruction.txt
-          sed -i "1s/version [0-9][0-9.]*/version $VER/" zip/instruction-en.txt
+          # the three indexes start with "Beam WRT <version>" in every language
+          for f in zip/instruction.txt zip/instruction-en.txt zip/instruction-zh.txt; do
+            sed -E -i "1s/^Beam WRT [0-9]+(\.[0-9]+)*/Beam WRT $VER/" "$f"
+            grep -q "^Beam WRT $VER" "$f"
+          done
           (cd zip && zip -q -X "../$ZIP" ./*)
           sha256sum "$ZIP"
           echo "VER=$VER" >> "$GITHUB_ENV"
