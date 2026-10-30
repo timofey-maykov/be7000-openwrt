@@ -13,7 +13,7 @@ Beam WRT 是给 Xiaomi BE7000 (RC06 主板，IPQ9554 处理器) 用的新版 Ope
 
 从 1.4.0 开始，固件基于 OpenWrt main (提交 d958caf，2026 年 9 月 29 日)，上面叠加 kravasuper 的移植，放在 patches/port 里作为补丁系列。1.4.0 之前用的是 kravasuper 的 xiaomi_be7000 分支，提交 790d036a。在这个基础上我修了以太网驱动，不修的话我这块板子上的系统连网络都起不来 ([patches.zh.md](docs/patches.zh.md))。另外还加了一组服务，让双槽位和原厂引导程序的行为变得可预期。
 
-当前版本是 **1.5.3**。镜像在 [Releases](../../releases) 里，校验和在 sha256sums.txt 里。安装方法见 [安装、更新和回滚](#安装更新和回滚) 一节。
+当前版本是 **1.5.4**。镜像在 [Releases](../../releases) 里，校验和在 sha256sums.txt 里。安装方法见 [安装、更新和回滚](#安装更新和回滚) 一节。
 
 ## 目录
 

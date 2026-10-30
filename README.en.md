@@ -13,7 +13,7 @@ Beam WRT is fresh OpenWrt from main for the Xiaomi BE7000 (RC06 board, IPQ9554 S
 
 Since 1.4.0 it is based on OpenWrt main (commit d958caf, September 29, 2026) with the kravasuper port on top, as the patch series in patches/port. Up to 1.4.0 the build sat on the kravasuper branch xiaomi_be7000, commit 790d036a. On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
 
-The current version is **1.5.3**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
+The current version is **1.5.4**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
 
 ## Contents
 
