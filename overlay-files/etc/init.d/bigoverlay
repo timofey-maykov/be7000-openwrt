@@ -40,6 +40,8 @@ STAMP=.bigoverlay_migrated
 # How many reboots we already spent trying to get fstools to mount the volume.
 SWITCH_TRIES=.bigoverlay_switch_tries
 
+. /lib/functions/be7000-factory-reset-guard.sh
+
 # The volume to live in: stock's, else the legacy one, else whatever is there.
 volume_dev() {
 	local n name first=""
@@ -109,6 +111,7 @@ rename_legacy() {
 # overlay on every boot, and the shared volume is never used.
 ensure_fstab() {
 	local dev="$1"
+	be7000_factory_reset_pending && return 1
 	[ -n "$dev" ] || dev=/dev/ubi1_0
 	if [ -z "$(uci -q get fstab.bigoverlay)" ]; then
 		uci -q batch <<-EOT
@@ -142,7 +145,8 @@ ensure_fstab() {
 # takes for some reason.
 switch_reboot() {
 	local dev="$1" why="$2" n=0
-	ensure_fstab "$dev"
+	be7000_factory_reset_pending && return 0
+	ensure_fstab "$dev" || return 0
 	mkdir -p /tmp/bigoverlay.sw
 	if mount -t ubifs "$dev" /tmp/bigoverlay.sw 2>/dev/null; then
 		[ -f /tmp/bigoverlay.sw/$SWITCH_TRIES ] && n=$(cat /tmp/bigoverlay.sw/$SWITCH_TRIES)
@@ -186,6 +190,10 @@ make_volume() {
 }
 
 boot() {
+	if be7000_factory_reset_pending; then
+		logger -t bigoverlay "factory reset pending, leaving extroot quarantined"
+		return 0
+	fi
 	# the data partition is glued to the spare slot as /overlay (System,
 	# Slots): there is no ubi1, and making one would wipe /overlay
 	grep -q '"be7000_concat"' /proc/mtd && return 0

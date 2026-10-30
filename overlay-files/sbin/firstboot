@@ -17,12 +17,36 @@
 # returns without the reboot that -r asks for. The next boot then finds the
 # old /overlay where it was, with every setting in it.
 #
-# So with /overlay elsewhere, erase the live /overlay the way factoryreset
-# erases a mounted rootfs_data, keep only the settings that say where
-# /overlay lives (fstab and bigoverlay, both in it and in rootfs_data,
-# which is left alone), and reboot when asked to.
+# So with /overlay elsewhere, schedule the erase in rootfs_data and leave the
+# live overlayfs alone. A preinit hook performs the reset on the next boot,
+# before the external filesystem becomes /overlay. fstab and bigoverlay are
+# kept in the job because they say where that fresh overlay has to live.
 
+JOB=.be7000_factory_reset
+MARK=.be7000_factory_reset_token
+FB_PROC_MOUNTS=/proc/mounts
+FB_SYS_UBI=/sys/class/ubi
+FB_OVERLAY=/overlay
+FB_CONFIG=/etc/config
+FB_TMPDIR=/tmp
+
+umask 077
+
+fail() {
+	logger -t firstboot "factory reset not scheduled: $*"
+	echo "Factory reset not scheduled: $*" >&2
+	exit 1
+}
+
+token_valid() {
+	[ "${#1}" = 32 ] || return 1
+	case "$1" in *[!0-9a-f]*) return 1 ;; esac
+	return 0
+}
+
+be7000_firstboot_main() {
 yes=0 reset=0 keep=0
+OPTIND=1
 while getopts "yrk" o; do
 	case "$o" in
 	y) yes=1 ;;
@@ -31,9 +55,10 @@ while getopts "yrk" o; do
 	esac
 done
 
-ov=$(awk '$2 == "/overlay" { print $1; exit }' /proc/mounts)
+ov=$(awk '$2 == "/overlay" { print $1; exit }' "$FB_PROC_MOUNTS")
+ovtype=$(awk '$2 == "/overlay" { print $3; exit }' "$FB_PROC_MOUNTS")
 rd=""
-for n in /sys/class/ubi/ubi*_*/name; do
+for n in "$FB_SYS_UBI"/ubi*_*/name; do
 	[ -e "$n" ] || continue
 	[ "$(cat "$n")" = rootfs_data ] && { rd="/dev/$(basename "$(dirname "$n")")"; break; }
 done
@@ -42,7 +67,16 @@ case "$ov" in
 ""|"$rd"|ubi0:rootfs_data|*rootfs_data*)
 	exec /sbin/factoryreset "$@" ;;
 esac
-[ -d /overlay/upper ] || exec /sbin/factoryreset "$@"
+[ -d "$FB_OVERLAY/upper" ] || fail "external /overlay has no upper directory"
+
+case "$ov" in
+/dev/*|ubi[0-9]*:*) ;;
+*) fail "unsupported /overlay source $ov" ;;
+esac
+case "$ovtype" in
+ubifs|ext4|f2fs|btrfs|ntfs|ntfs3) ;;
+*) fail "unsupported /overlay filesystem $ovtype" ;;
+esac
 
 if [ $yes != 1 ]; then
 	echo "This will erase all settings and remove any installed packages. Are you sure? [N/y]"
@@ -50,25 +84,74 @@ if [ $yes != 1 ]; then
 	[ "$a" = y ] || exit 1
 fi
 
-logger -t firstboot "factory reset of /overlay on $ov"
-keepdir=/tmp/be7000-reset-keep
-rm -rf $keepdir
-mkdir -p $keepdir/etc/config
-for f in fstab bigoverlay; do
-	[ -f /overlay/upper/etc/config/$f ] && cp -a /overlay/upper/etc/config/$f $keepdir/etc/config/
-done
-for f in /overlay/upper/* /overlay/upper/.[!.]*; do
-	[ -e "$f" ] || [ -L "$f" ] || continue
-	rm -rf "$f"
-done
-[ $keep = 1 ] || rm -f /overlay/sysupgrade.tgz
-cp -a $keepdir/. /overlay/upper/
-rm -rf $keepdir
+[ -n "$rd" ] || fail "rootfs_data volume was not found"
+awk -v d="$rd" '$1 == d { found=1 } END { exit !found }' "$FB_PROC_MOUNTS" &&
+	fail "$rd is already mounted"
+
+R=$(mktemp -d "$FB_TMPDIR/be7000-reset-schedule.XXXXXX") || fail "cannot create the staging directory"
+mkdir -p "$R/rd" || fail "cannot create the staging directory"
+mount -t ubifs "$rd" "$R/rd" || fail "cannot mount $rd"
+
+job="$R/rd/$JOB"
+tmp="$R/rd/$JOB.new"
+marker="$FB_OVERLAY/$MARK"
+markertmp="$FB_OVERLAY/$MARK.new"
+token=
+
+abort_schedule() {
+	local why="$1"
+	if [ -n "${token:-}" ] && [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" = "$token" ]; then
+		rm -f "$marker"
+	fi
+	rm -rf "$tmp"
+	sync
+	if umount "$R/rd" 2>/dev/null; then
+		rmdir "$R/rd" "$R" 2>/dev/null
+	else
+		fail "$why; cannot unmount $rd"
+	fi
+	fail "$why"
+}
+
+[ ! -e "$job" ] && [ ! -L "$job" ] || abort_schedule "a factory reset is already pending"
+rm -rf "$tmp"
+mkdir -p "$tmp/config" || abort_schedule "cannot create the reset job"
+
+token=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+token_valid "$token" || abort_schedule "cannot generate the reset token"
+
+printf '%s\n' 1 > "$tmp/version" || abort_schedule "cannot write the reset job"
+printf '%s\n' "$ov" > "$tmp/device" || abort_schedule "cannot write the reset job"
+printf '%s\n' "$ovtype" > "$tmp/fstype" || abort_schedule "cannot write the reset job"
+printf '%s\n' "$token" > "$tmp/token" || abort_schedule "cannot write the reset job"
+printf '%s\n' "$keep" > "$tmp/keep" || abort_schedule "cannot write the reset job"
+cp -a "$FB_CONFIG/fstab" "$tmp/config/fstab" || abort_schedule "cannot preserve fstab"
+cp -a "$FB_CONFIG/bigoverlay" "$tmp/config/bigoverlay" || abort_schedule "cannot preserve bigoverlay"
+cmp -s "$FB_CONFIG/fstab" "$tmp/config/fstab" || abort_schedule "the fstab copy did not verify"
+cmp -s "$FB_CONFIG/bigoverlay" "$tmp/config/bigoverlay" || abort_schedule "the bigoverlay copy did not verify"
+
+rm -f "$markertmp"
+printf '%s\n' "$token" > "$markertmp" || abort_schedule "cannot write the target marker"
+chmod 600 "$markertmp" 2>/dev/null
+mv -f "$markertmp" "$marker" || abort_schedule "cannot publish the target marker"
+[ "$(cat "$marker" 2>/dev/null)" = "$token" ] || abort_schedule "the target marker did not verify"
+
 sync
-mount -o remount / 2>/dev/null
+mv "$tmp" "$job" || abort_schedule "cannot publish the reset job"
+sync
+if ! umount "$R/rd"; then
+	[ -f "$job/token" ] && [ "$(cat "$job/token" 2>/dev/null)" = "$token" ] && rm -rf "$job"
+	abort_schedule "cannot unmount $rd"
+fi
+rmdir "$R/rd" "$R" 2>/dev/null
+
+logger -t firstboot "factory reset of /overlay on $ov scheduled for the next boot"
 
 if [ $reset = 1 ]; then
 	sleep 2
 	reboot
 fi
 exit 0
+}
+
+be7000_firstboot_main "$@"

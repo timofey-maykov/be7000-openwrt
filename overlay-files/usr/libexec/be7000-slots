@@ -37,6 +37,8 @@
 
 JSON=1
 
+. /lib/functions/be7000-factory-reset-guard.sh
+
 mtd_of() { [ "$1" = 0 ] && echo rootfs || echo rootfs_1; }
 
 current() {
@@ -155,6 +157,10 @@ stock_settings_flag() {
 
 cmd_switch() {
 	local slot="$1" cur kind info why
+	be7000_factory_reset_pending && {
+		echo "factory reset is pending; slot switching is deferred" >&2
+		return 1
+	}
 	cur="$(current)" || { echo "no ubi.mtd=rootfs* on the command line" >&2; return 1; }
 	case "$slot" in 0|1) ;; *) echo "slot is 0 or 1" >&2; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo "slot $slot is already running" >&2; return 1; }
@@ -286,6 +292,7 @@ rootfs_data_dev() {
 # /overlay is that volume, it is the live /etc/config.
 with_rootfs_data() {
 	local dev dir mnt="" rc=0
+	be7000_factory_reset_pending && { echo "factory reset is pending" >&2; return 1; }
 	dev="$(rootfs_data_dev)" || { echo "rootfs_data volume not found" >&2; return 1; }
 	if [ "$(overlay_kind)" = inslot ]; then
 		uci -q batch
@@ -450,6 +457,7 @@ fstab_bigoverlay_batch() {
 # set for the move, which preinit does on the next boot
 cmd_storage_enable() {
 	local mode="" f="" yes="" oth name kind src usedkb
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
 	while [ $# -gt 0 ]; do
 		case "$1" in
 		--backup) mode=backup; f="$2"; shift ;;
@@ -522,6 +530,7 @@ storage_undo_config() {
 # boot, and the spare slot is left empty
 cmd_storage_disable() {
 	local yes="$1" usedkb
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
 	[ "$yes" = "--yes" ] || { die "pass --yes"; return 1; }
 	[ -n "$(storage_value)" ] || { die "the spare slot is not storage"; return 1; }
 	[ -n "$(storage_op)" ] && { die "a change of the spare slot already waits for the reboot"; return 1; }
@@ -548,6 +557,7 @@ cmd_storage_disable() {
 
 # storage-cancel: drop a move that waits for the reboot
 cmd_storage_cancel() {
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
 	case "$(storage_op)" in
 	enable*) storage_undo_config ;;
 	disable) fstab_slotstorage_batch | with_rootfs_data; fstab_slotstorage_batch | uci -q batch

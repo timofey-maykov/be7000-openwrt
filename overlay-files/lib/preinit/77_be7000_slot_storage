@@ -39,6 +39,16 @@ s77_log() {
 	echo "be7000 slot storage: $*" > /dev/kmsg 2>/dev/null
 }
 
+# Returning to mount_root with slot storage attached and an active extroot
+# fstab is unsafe when a factory reset is pending: the external upper may be
+# only partly rebuilt. Force a reboot and never fall through if it returns.
+s77_fatal() {
+	s77_log "$1"
+	sync
+	reboot -f 2>/dev/null
+	while :; do sleep 3600; done
+}
+
 s77_fw() {
 	local env
 	env=$(grep -i '"0:appsblenv"' /proc/mtd | cut -d: -f1)
@@ -130,11 +140,53 @@ s77_slotstorage_fstab_ok() {
 	[ -z "$big" ] || [ "$big" = 0 ]
 }
 
+s77_quarantine_reset_fstab() {
+	local dev="$1" fstab rootfstab
+	fstab="$S/rd/upper/etc/config/fstab"
+	rootfstab="$S/rd/etc/config/fstab"
+	mount -t ubifs -o rw,noatime "$dev" "$S/rd" || return 1
+	rm -f "$fstab" "$rootfstab" || return 1
+	sync || return 1
+	[ ! -e "$fstab" ] && [ ! -L "$fstab" ] &&
+	[ ! -e "$rootfstab" ] && [ ! -L "$rootfstab" ] || return 1
+	umount "$S/rd" || return 1
+	return 0
+}
+
+# Return success only when a pending reset was found and quarantined. The
+# caller must then defer every slot-storage operation until reset completion.
+s77_pending_factory_reset() {
+	local dev pending=1
+	dev=$(s77_vol ubi0 rootfs_data) || { s77_fatal "cannot find rootfs_data while checking factory reset"; return 2; }
+	mkdir -p "$S/rd" || { s77_fatal "cannot prepare the factory-reset check"; return 2; }
+	mount -t ubifs -o ro "$dev" "$S/rd" || { s77_fatal "cannot inspect rootfs_data for a factory reset"; return 2; }
+	if [ -e "$S/rd/.be7000_factory_reset" ] ||
+	   [ -L "$S/rd/.be7000_factory_reset" ]; then
+		pending=0
+	fi
+	if ! umount "$S/rd"; then
+		s77_fatal "cannot unmount rootfs_data after the factory-reset check"
+		return 2
+	fi
+	[ "$pending" = 0 ] || return 1
+	if ! s77_quarantine_reset_fstab "$dev"; then
+		s77_fatal "cannot quarantine extroot for the pending factory reset"
+		return 2
+	fi
+	return 0
+}
+
 s77_ensure_slotstorage_fstab() {
-	local dev c
+	local dev c rc
 	# The bootloader flag alone is not enough to write a mount entry: verify
 	# that the expected named volume is really attached at the expected node.
 	[ "$(s77_vol ubi2 "$VOL")" = /dev/ubi2_0 ] || return 1
+	s77_pending_factory_reset && rc=0 || rc=$?
+	if [ "$rc" = 0 ]; then
+		s77_log "kept slot storage attached with extroot quarantined for the pending factory reset"
+		return 0
+	fi
+	[ "$rc" = 1 ] || return 1
 	dev=$(s77_vol ubi0 rootfs_data) || return 1
 	mkdir -p "$S/rd"
 	mount -t ubifs -o ro "$dev" "$S/rd" || return 1
@@ -330,17 +382,27 @@ s77_disable() {
 	rm -rf $S
 }
 
-be7000_slot_storage() {
-	local cur="" a val op slot num
-	for a in $(cat /proc/cmdline); do
-		case "$a" in ubi.mtd=rootfs|ubi.mtd=rootfs_1) cur=${a#ubi.mtd=} ;; esac
-	done
-	[ -n "$cur" ] || return 0
-	s77_fw || return 0
-	val=$(s77_get be7000_slot_storage)
-	op=$(s77_get be7000_slot_storage_op)
-	mkdir -p $S
-
+s77_dispatch() {
+	local cur="$1" val="$2" op="$3" slot num rc
+	s77_pending_factory_reset && rc=0 || rc=$?
+	if [ "$rc" = 0 ]; then
+		# Do not clear op: enable/disable remains queued until the reset job is
+		# gone. If slot storage is already configured, attach it for hook 78,
+		# but never repair fstab or migrate/format anything here.
+		slot=${val%%+*}
+		case "$slot" in
+		rootfs|rootfs_1)
+			if [ "$slot" != "$cur" ]; then
+				num=$(s77_concat_up "$slot")
+				[ -z "$num" ] || ubiattach -m "$num" -d 2 >/dev/null 2>&1 || :
+				s77_nodes ubi2
+			fi
+			;;
+		esac
+		s77_log "deferred slot-storage operation while the factory reset is pending"
+		return 0
+	fi
+	[ "$rc" = 1 ] || return 1
 	set -- $op
 	case "$1" in
 	enable)
@@ -365,6 +427,19 @@ be7000_slot_storage() {
 		fi
 		;;
 	esac
+}
+
+be7000_slot_storage() {
+	local cur="" a val op
+	for a in $(cat /proc/cmdline); do
+		case "$a" in ubi.mtd=rootfs|ubi.mtd=rootfs_1) cur=${a#ubi.mtd=} ;; esac
+	done
+	[ -n "$cur" ] || return 0
+	s77_fw || return 0
+	val=$(s77_get be7000_slot_storage)
+	op=$(s77_get be7000_slot_storage_op)
+	mkdir -p $S
+	s77_dispatch "$cur" "$val" "$op"
 	rm -f $FWCFG
 }
 

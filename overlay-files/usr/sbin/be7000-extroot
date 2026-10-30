@@ -23,6 +23,8 @@ set -e
 LABEL=be7000_overlay
 MNT=/tmp/extroot.$$
 
+. /lib/functions/be7000-factory-reset-guard.sh
+
 die() { echo "$*" >&2; exit 1; }
 
 # fstools reads the extroot entry from the fstab in the slot's own rootfs_data
@@ -78,6 +80,7 @@ with_volume_config() {
 
 with_rootfs_data() {
 	local dev
+	be7000_factory_reset_pending && { echo "factory reset is pending" >&2; return 1; }
 	dev="$(rootfs_data_dev)" || { echo "rootfs_data volume not found" >&2; return 1; }
 	with_volume_config "$dev"
 }
@@ -200,6 +203,7 @@ cmd_status_json() {
 
 cmd_use() {
 	local dev="$1" yes="$2" do_reboot="$3" uuid
+	be7000_factory_reset_pending && die "factory reset is pending; extroot changes are deferred"
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
 	[ -b "$dev" ] || die "$dev is not a block device"
 	dev_in_use "$dev" && die "$dev is mounted or used as swap, free it first"
@@ -276,6 +280,7 @@ cmd_use() {
 
 cmd_revert() {
 	local yes="$1" do_reboot="$2"
+	be7000_factory_reset_pending && die "factory reset is pending; extroot changes are deferred"
 	uci -q get fstab.extroot >/dev/null || die "no extroot entry to remove"
 	if [ "$yes" != 1 ]; then
 		echo "This returns /overlay to internal flash. Anything stored on the disk stays there but stops being used."
@@ -304,6 +309,10 @@ cmd_revert() {
 # is already there nothing changes, so this cannot loop.
 cmd_boot_sync() {
 	local rd cur mnt dir="" uuid en rd_uuid rd_en kver changed=0 marker bigdev bigen extuuid exten useful _w
+	if be7000_factory_reset_pending; then
+		logger -t be7000-extroot "factory reset pending, leaving extroot quarantined"
+		return 0
+	fi
 	[ -e /rom/etc/be7000-test ] && return 0
 	rd="$(rootfs_data_dev)" || return 0
 	cur="$(current_overlay_device)"
