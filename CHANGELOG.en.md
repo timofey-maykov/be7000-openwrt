@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.5**, November 3, 2026.
+- Fixed a clean installation from the factory firmware. The empty `rootfs_data` in a factory image has no UBIFS yet; the reset-job check in 1.5.4 treated the expected mount failure as fatal and immediately rebooted the router, so the factory U-Boot returned to the stock slot.
+- The first boot now leaves the empty volume to `mount_root`, which initializes it normally. The fail-closed handling of an actual pending factory reset is unchanged.
+
 **1.5.4**, October 30, 2026.
 - Fixed factory reset when `/overlay` lives on the joined volume or a USB drive. The data is now reset before `/overlay` is mounted instead of from the running system.
 - A reset resumes after a power loss. Until it is complete, the storage scripts cannot restore the old extroot entry, switch slots, or start another operation on the volume.
