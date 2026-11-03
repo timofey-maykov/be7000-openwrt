@@ -159,7 +159,12 @@ s77_pending_factory_reset() {
 	local dev pending=1
 	dev=$(s77_vol ubi0 rootfs_data) || { s77_fatal "cannot find rootfs_data while checking factory reset"; return 2; }
 	mkdir -p "$S/rd" || { s77_fatal "cannot prepare the factory-reset check"; return 2; }
-	mount -t ubifs -o ro "$dev" "$S/rd" || { s77_fatal "cannot inspect rootfs_data for a factory reset"; return 2; }
+	# A factory image carries an empty rootfs_data UBI volume.  It has no
+	# UBIFS filesystem until mount_root initializes it on the first boot, so
+	# the read-only probe normally fails after a clean install.  There cannot
+	# be a reset job in an unmountable filesystem; let mount_root continue and
+	# create it.  Fail closed only after a real job has been found below.
+	mount -t ubifs -o ro "$dev" "$S/rd" || return 1
 	if [ -e "$S/rd/.be7000_factory_reset" ] ||
 	   [ -L "$S/rd/.be7000_factory_reset" ]; then
 		pending=0

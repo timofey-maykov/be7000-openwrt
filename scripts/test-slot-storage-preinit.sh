@@ -62,6 +62,7 @@ mount() {
 	esac
 	assert_eq "$5" /dev/ubi0_2 "rootfs_data device"
 	MOUNTS=$((MOUNTS + 1))
+	[ "$MOUNT_RC" = 0 ] || return "$MOUNT_RC"
 }
 
 umount() {
@@ -123,6 +124,7 @@ reset_case() {
 	SS_ENABLED=1
 	BIG_ENABLED=0
 	WRITE_RC=0
+	MOUNT_RC=0
 	MOUNTS=0
 	RO_MOUNTS=0
 	RW_MOUNTS=0
@@ -138,6 +140,23 @@ reset_case() {
 	CONCAT_UPS=0
 	UBIATTACHES=0
 }
+
+# On the first boot of a factory image rootfs_data is an empty UBI volume,
+# not UBIFS yet.  The reset-job probe must leave it to mount_root instead of
+# forcing an immediate reboot and making the factory bootloader fall back.
+reset_case fresh_rootfs_data
+MOUNT_RC=1
+if s77_pending_factory_reset; then
+	fail "fresh rootfs_data was treated as a pending reset"
+else
+	rc=$?
+fi
+assert_eq "$rc" 1 "fresh rootfs_data result"
+assert_eq "$MOUNTS" 1 "fresh rootfs_data probe count"
+assert_eq "$FATALS" 0 "fresh rootfs_data fatal count"
+assert_eq "$ENABLES" 0 "fresh rootfs_data enable count"
+assert_eq "$DISABLES" 0 "fresh rootfs_data disable count"
+assert_eq "$ENV_WRITES" 0 "fresh rootfs_data environment writes"
 
 reset_case correct
 s77_prepare_slotstorage_fstab || fail "correct fstab was rejected"
