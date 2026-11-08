@@ -29,6 +29,7 @@ The last two patches fix real driver bugs and do not depend on the board, they a
 | 0906 | qcom-ppe: rows of multi-word PPE tables are written whole, the hardware loses a single-word write |
 | 0907 | qcom-ppe: bridging the ports in the PPE is enabled by the module parameter bridge_offload, off by default |
 | 0908 | spi-qpic-snand: the ECC strength comes from the flash model, from the same table as in stock (GigaDevice GD5F1GQ5REYIG 8 bits, ESMT F50D1G41LB 4 bits and 15 more parts), not from the DTS. On newer boards with the ESMT part the firmware did not boot at all before |
+| 0910 | QCA8084: EEE is no longer advertised by default. With some link partners (Eltex and Huawei ISP ONTs at 1 Gbit/s) EEE causes a storm of rx CRC errors, UDP loss and link flaps, and the SoC MAC cannot signal LPI anyway. It can be turned back on with ethtool --set-eee |
 
 ## OpenWrt tree changes
 

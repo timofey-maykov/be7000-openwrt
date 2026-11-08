@@ -29,6 +29,7 @@
 | 0906 | qcom-ppe，多字宽的 PPE 表按整行写入，只写一个字的话硬件会丢掉这次写入 |
 | 0907 | qcom-ppe，PPE 里的端口桥接由模块参数 bridge_offload 打开，默认关闭 |
 | 0908 | spi-qpic-snand：ECC 强度根据闪存型号从与原厂固件相同的表中选取（GigaDevice GD5F1GQ5REYIG 为 8 位，ESMT F50D1G41LB 为 4 位，另有 15 个型号），而不是取自 DTS。此前在配备 ESMT 闪存的较新主板上固件根本无法启动 |
+| 0910 | QCA8084：默认不再通告 EEE。对于某些链路对端（Eltex 和 Huawei 运营商光猫在 1 Gbit/s 下），EEE 会导致接收端 CRC 错误激增、UDP 丢包和链路抖动，而 SoC 的 MAC 本来就不支持 LPI。如需重新启用，可使用 ethtool --set-eee |
 
 ## OpenWrt 源码树的改动
 
