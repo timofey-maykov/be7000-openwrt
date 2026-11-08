@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.6**, November 8, 2026.
+- Fixed factory reset from LuCI or the button when `/overlay` lives on the joined volume, in the slot storage or on a USB drive. The image had no `od` utility, which the reset script used to generate its internal token, so the reset job was never created and LuCI showed "Erasing..." forever.
+- The QCA8084 no longer advertises EEE by default. With some link partners (Eltex and Huawei ISP ONTs at 1 Gbit/s) EEE caused a storm of rx CRC errors, UDP loss and link flaps, and the SoC MAC cannot signal LPI anyway. It can be turned back on with `ethtool --set-eee`.
+
 **1.5.5**, November 3, 2026.
 - Fixed a clean installation from the factory firmware. The empty `rootfs_data` in a factory image has no UBIFS yet; the reset-job check in 1.5.4 treated the expected mount failure as fatal and immediately rebooted the router, so the factory U-Boot returned to the stock slot.
 - The first boot now leaves the empty volume to `mount_root`, which initializes it normally. The fail-closed handling of an actual pending factory reset is unchanged.
