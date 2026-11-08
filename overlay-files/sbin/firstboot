@@ -117,7 +117,9 @@ abort_schedule() {
 rm -rf "$tmp"
 mkdir -p "$tmp/config" || abort_schedule "cannot create the reset job"
 
-token=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+# od is not part of the image; hexdump is, and it works the same on
+# the hosts that run the tests.
+token=$(hexdump -v -n 16 -e '1/1 "%02x"' /dev/urandom 2>/dev/null | tr -d ' \n')
 token_valid "$token" || abort_schedule "cannot generate the reset token"
 
 printf '%s\n' 1 > "$tmp/version" || abort_schedule "cannot write the reset job"
