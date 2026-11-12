@@ -216,7 +216,7 @@ return view.extend({
 			if (!fits)
 				body.appendChild(E('p', { 'class': 'bs-note' }, _('Сейчас в /overlay %s МБ, а на разделе данных помещается около %s МБ. Чтобы вернуть слот, сначала удалите лишние пакеты.').format(this.mb(ss.overlay_used_kb), this.mb(ss.fit_cfg_kb))));
 			body.appendChild(E('div', { 'class': 'bs-row' }, [
-				E('button', { 'class': 'cbi-button cbi-button-negative', 'disabled': !fits, 'click': ui.createHandlerFn(this, 'askDisable') }, _('Вернуть второй слот'))
+				E('button', { 'class': 'cbi-button cbi-button-negative', 'disabled': !fits || null, 'click': ui.createHandlerFn(this, 'askDisable') }, _('Вернуть второй слот'))
 			]));
 		}
 		else if (ss.configured) {
