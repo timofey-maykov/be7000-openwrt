@@ -17,7 +17,7 @@ const { spawnSync } = require('node:child_process');
 const repo = path.resolve(__dirname, '..');
 const rootfs = path.resolve(process.argv[2]);
 const output = path.resolve(process.argv[3]);
-const name = 'be7000-luci-lan-hotfix-v1.5.6-r2';
+const name = 'be7000-luci-lan-hotfix-v1.5.6';
 const pkg = path.join(output, name);
 if (fs.existsSync(pkg)) throw new Error('Package output already exists: ' + pkg);
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'be7000-lan-package-'));

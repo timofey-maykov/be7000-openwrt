@@ -41,7 +41,7 @@ function fixture(name) {
 }
 function run(root, action, { ok = true, packageDir = pkg, saved = false, inject = false, legacy = false } = {}) {
     const prefix = '/work/' + path.basename(root);
-    const script = saved ? prefix + '/root/be7000-luci-lan-hotfix-' + (legacy ? 'v1' : 'v2') + '/hotfix.sh' : '/hotfix/install.sh';
+    const script = saved ? prefix + '/root/be7000-luci-lan-hotfix-' + (legacy ? 'v1' : 'backup') + '/hotfix.sh' : '/hotfix/install.sh';
     const args = ['run', '--rm', '--pull', 'never',
         '--mount', `type=bind,source=${temp},target=/work`,
         '--mount', `type=bind,source=${packageDir},target=/hotfix,readonly`,
@@ -117,7 +117,7 @@ write(path.join(temp, 'wrappers/mv'), '#!/bin/sh\nfor last in "$@"; do :; done\n
     'exec /bin/mv "$@"\n', 0o755);
 assert.match(run(failure, 'apply', { ok: false, inject: true }), /restoring the original web interface/);
 assert.deepEqual(snapshot(failure), failureBefore, 'partial install must restore every file');
-assert.equal(fs.existsSync(path.join(failure, 'root/be7000-luci-lan-hotfix-v2/installed')), false);
+assert.equal(fs.existsSync(path.join(failure, 'root/be7000-luci-lan-hotfix-backup/installed')), false);
 assert.equal(fs.existsSync(path.join(failure, 'tmp/be7000-luci-lan-hotfix.lock')), false);
 run(failure, 'apply');
 run(failure, 'rollback', { saved: true });
