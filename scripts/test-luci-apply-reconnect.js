@@ -17,14 +17,15 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(process.argv[2], 'utf8');
-const start = source.indexOf('\t\tcheckConnectivityAffected() {');
-const end = source.indexOf('\n\t\t/**\n\t\t * Revert the staged', start);
+const start = source.search(/checkConnectivityAffected\(\)\s*\{/);
+let end = source.indexOf('\n\t\t/**\n\t\t * Revert the staged', start);
+if (end < 0) end = source.indexOf('revert(){', start);
 assert(start > 0 && end > start, 'expected LuCI changes methods in ui.js');
 const methods = '({' + source.slice(start, end) + '\n})';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Exercise the actual controller action, not just permissive fixture headers.
-const controller = fs.readFileSync(path.resolve(path.dirname(process.argv[2]),
+const controller = fs.readFileSync(process.argv[3] || path.resolve(path.dirname(process.argv[2]),
     '../../../ucode/controller/admin/uci.uc'), 'utf8');
 const confirmStart = controller.indexOf('\taction_confirm: function() {');
 const confirmEnd = controller.indexOf('\n\taction_revert:', confirmStart);
