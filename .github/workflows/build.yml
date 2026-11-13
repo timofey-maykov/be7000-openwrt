@@ -198,6 +198,8 @@ jobs:
               patch -d "feeds/$feed" -p1 --forward --no-backup-if-mismatch < "$p"
             done
           done
+          node ../repo/scripts/test-luci-apply-reconnect.js \
+            feeds/luci/modules/luci-base/htdocs/luci-static/resources/ui.js
           ./scripts/feeds install -a
 
       - name: Configure

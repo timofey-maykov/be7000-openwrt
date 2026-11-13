@@ -1307,3 +1307,6 @@ msgstr "Slot %d is given over to packages, but attaching it at boot failed, /ove
 
 msgid "Это сборка roamd от Ground-Zerro под BE7000. Скрипт установки из его репозитория на этот роутер не подходит, ставьте кнопкой выше."
 msgstr "This is Ground-Zerro's roamd built for the BE7000. The install script from his repository does not fit this router, use the button above."
+
+msgid "Если компьютер остался в старой подсети, переподключитесь к сети или обновите адрес по DHCP. Страница откроется по новому адресу после восстановления связи."
+msgstr "If your computer still uses the previous subnet, reconnect to the network or renew its DHCP lease. The page will open at the new address once connectivity returns."
