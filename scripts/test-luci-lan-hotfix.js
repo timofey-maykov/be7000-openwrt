@@ -21,6 +21,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'be7000-hotfix-test-'));
 const files = [
     'www/luci-static/resources/ui.js',
     'usr/share/ucode/luci/controller/admin/uci.uc',
+    'usr/share/luci/menu.d/luci-base.json',
     'usr/lib/lua/luci/i18n/luci-lan-reconnect.en.lmo',
     'usr/lib/lua/luci/i18n/luci-lan-reconnect.zh-cn.lmo'
 ];
@@ -34,13 +35,13 @@ function fixture(name) {
     const root = path.join(temp, name);
     fs.mkdirSync(path.join(root, 'root'), { recursive: true });
     fs.mkdirSync(path.join(root, 'tmp'));
-    for (const p of ['etc/openwrt_release', ...files.slice(0, 2)])
+    for (const p of ['etc/openwrt_release', ...files.slice(0, 3)])
         write(path.join(root, p), fs.readFileSync(path.join(rootfs, p)));
     return root;
 }
-function run(root, action, { ok = true, packageDir = pkg, saved = false, inject = false } = {}) {
+function run(root, action, { ok = true, packageDir = pkg, saved = false, inject = false, legacy = false } = {}) {
     const prefix = '/work/' + path.basename(root);
-    const script = saved ? prefix + '/root/be7000-luci-lan-hotfix-v1/hotfix.sh' : '/hotfix/install.sh';
+    const script = saved ? prefix + '/root/be7000-luci-lan-hotfix-' + (legacy ? 'v1' : 'v2') + '/hotfix.sh' : '/hotfix/install.sh';
     const args = ['run', '--rm', '--pull', 'never',
         '--mount', `type=bind,source=${temp},target=/work`,
         '--mount', `type=bind,source=${packageDir},target=/hotfix,readonly`,
@@ -65,7 +66,7 @@ assert.match(run(normal, 'rollback', { saved: true }), /Original LuCI restored/)
 assert.deepEqual(snapshot(normal), before, 'standalone backup must restore exact originals');
 assert.match(run(normal, 'apply'), /Hotfix installed/, 'reinstall after rollback');
 run(normal, 'rollback', { saved: true });
-write(path.join(normal, files[2]), 'a new catalogue created after rollback');
+write(path.join(normal, files[3]), 'a new catalogue created after rollback');
 const beforeReinstall = snapshot(normal);
 assert.match(run(normal, 'apply', { ok: false }), /new file appeared since rollback/);
 assert.deepEqual(snapshot(normal), beforeReinstall);
@@ -116,11 +117,22 @@ write(path.join(temp, 'wrappers/mv'), '#!/bin/sh\nfor last in "$@"; do :; done\n
     'exec /bin/mv "$@"\n', 0o755);
 assert.match(run(failure, 'apply', { ok: false, inject: true }), /restoring the original web interface/);
 assert.deepEqual(snapshot(failure), failureBefore, 'partial install must restore every file');
-assert.equal(fs.existsSync(path.join(failure, 'root/be7000-luci-lan-hotfix-v1/installed')), false);
+assert.equal(fs.existsSync(path.join(failure, 'root/be7000-luci-lan-hotfix-v2/installed')), false);
 assert.equal(fs.existsSync(path.join(failure, 'tmp/be7000-luci-lan-hotfix.lock')), false);
 run(failure, 'apply');
 run(failure, 'rollback', { saved: true });
 assert.deepEqual(snapshot(failure), failureBefore);
 console.log('PASS: write failure restores originals automatically and permits a clean retry');
+if (process.argv[4]) {
+    const migration = fixture('r1-migration'), migrationBefore = snapshot(migration);
+    run(migration, 'apply', { packageDir: path.resolve(process.argv[4]) });
+    assert.match(run(migration, 'apply', { ok: false }), /differs from release/);
+    run(migration, 'rollback', { saved: true, legacy: true });
+    assert.deepEqual(snapshot(migration), migrationBefore);
+    run(migration, 'apply');
+    run(migration, 'rollback', { saved: true });
+    assert.deepEqual(snapshot(migration), migrationBefore);
+    console.log('PASS: documented r1 rollback and r2 installation preserve the release originals');
+}
 console.log('Hotfix installation tests: OK');
 console.log('Disposable test fixtures: ' + temp);

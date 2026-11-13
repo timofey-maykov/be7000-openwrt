@@ -17,16 +17,18 @@ const { spawnSync } = require('node:child_process');
 const repo = path.resolve(__dirname, '..');
 const rootfs = path.resolve(process.argv[2]);
 const output = path.resolve(process.argv[3]);
-const name = 'be7000-luci-lan-hotfix-v1.5.6-r1';
+const name = 'be7000-luci-lan-hotfix-v1.5.6-r2';
 const pkg = path.join(output, name);
 if (fs.existsSync(pkg)) throw new Error('Package output already exists: ' + pkg);
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'be7000-lan-package-'));
 const rev = fs.readFileSync(path.join(repo, 'feeds-pins.txt'), 'utf8').match(/^luci (\S+)/m)[1];
 const ui = 'modules/luci-base/htdocs/luci-static/resources/ui.js';
 const controller = 'modules/luci-base/ucode/controller/admin/uci.uc';
+const menu = 'modules/luci-base/root/usr/share/luci/menu.d/luci-base.json';
 const originals = {
     'www/luci-static/resources/ui.js': '2e0e38b359a91919d50d2f2b37e3f61dac7a33ffcc4c6210feacc2a5d80a48ed',
-    'usr/share/ucode/luci/controller/admin/uci.uc': 'ac75cfef7d74f87ed7f957778004a7bf486c76df699398c215795b4947e0c93e'
+    'usr/share/ucode/luci/controller/admin/uci.uc': 'ac75cfef7d74f87ed7f957778004a7bf486c76df699398c215795b4947e0c93e',
+    'usr/share/luci/menu.d/luci-base.json': '8490166253a477e5755c053d6eb76b025c3d6f89c0016b41b6d54de8e2237faa'
 };
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 function write(file, data, mode = 0o644) {
@@ -52,6 +54,7 @@ for (const [file, expected] of Object.entries(originals)) {
 }
 download(ui);
 download(controller);
+download(menu);
 const jsminSource = download('modules/luci-base/src/jsmin.c');
 const jsmin = path.join(scratch, 'jsmin');
 run('cc', ['-O2', '-o', jsmin, jsminSource]);
@@ -60,13 +63,17 @@ if (digest(baseMinified) !== originals['www/luci-static/resources/ui.js'])
     throw new Error('Pinned LuCI source does not reproduce the released ui.js');
 if (digest(fs.readFileSync(path.join(scratch, controller))) !== originals['usr/share/ucode/luci/controller/admin/uci.uc'])
     throw new Error('Pinned controller does not reproduce the released uci.uc');
+if (digest(fs.readFileSync(path.join(scratch, menu))) !== originals['usr/share/luci/menu.d/luci-base.json'])
+    throw new Error('Pinned menu does not reproduce the released luci-base.json');
 run('patch', ['-p1', '--forward', '--no-backup-if-mismatch', '-i',
     path.join(repo, 'patches/feeds/luci/010-confirm-new-lan-address.patch')], { cwd: scratch });
 process.stdout.write(run(process.execPath, [path.join(repo, 'scripts/test-luci-apply-reconnect.js'), path.join(scratch, ui)]));
+process.stdout.write(run(process.execPath, [path.join(repo, 'scripts/test-luci-apply-reauth.js'), path.join(scratch, controller), path.join(scratch, menu)]));
 
 const files = {
     'www/luci-static/resources/ui.js': run(jsmin, [], { input: fs.readFileSync(path.join(scratch, ui)) }),
-    'usr/share/ucode/luci/controller/admin/uci.uc': fs.readFileSync(path.join(scratch, controller))
+    'usr/share/ucode/luci/controller/admin/uci.uc': fs.readFileSync(path.join(scratch, controller)),
+    'usr/share/luci/menu.d/luci-base.json': fs.readFileSync(path.join(scratch, menu))
 };
 // Compile a separate tiny catalogue; leave the installed Beam WRT catalogues intact.
 const po2lmoSource = download('modules/luci-base/src/po2lmo.c');
@@ -76,13 +83,16 @@ const hashOnly = fs.readFileSync(lmoSource, 'utf8').split('uint32_t lmo_canon_ha
     .replace('#include "plural_formula.h"', '');
 const po2lmo = path.join(scratch, 'po2lmo');
 run('cc', ['-O2', '-I', path.dirname(lmoSource), '-o', po2lmo, po2lmoSource, '-x', 'c', '-'], { input: hashOnly });
-const message = 'Если компьютер остался в старой подсети, переподключитесь к сети или обновите адрес по DHCP. Страница откроется по новому адресу после восстановления связи.';
+const messages = [...new Set([...fs.readFileSync(path.join(scratch, ui), 'utf8').matchAll(/_\('([^']*[А-Яа-яЁё][^']*)'\)/g)].map(m => m[1]))];
 for (const language of ['en', 'zh-cn']) {
     const catalogue = fs.readFileSync(path.join(repo, 'i18n', `be7000.${language}.po`), 'utf8');
-    const entry = catalogue.split('msgid ' + JSON.stringify(message) + '\n')[1]?.match(/^msgstr (".*")/);
-    if (!entry) throw new Error('Translation missing: ' + language);
     const po = path.join(scratch, `${language}.po`), lmo = path.join(scratch, `${language}.lmo`);
-    write(po, 'msgid ""\nmsgstr "Content-Type: text/plain; charset=UTF-8\\n"\n\nmsgid ' + JSON.stringify(message) + '\nmsgstr ' + entry[1] + '\n');
+    const entries = messages.map(message => {
+        const entry = catalogue.split('msgid ' + JSON.stringify(message) + '\n')[1]?.match(/^msgstr (".*")/);
+        if (!entry) throw new Error('Translation missing: ' + language + ': ' + message);
+        return 'msgid ' + JSON.stringify(message) + '\nmsgstr ' + entry[1] + '\n';
+    });
+    write(po, 'msgid ""\nmsgstr "Content-Type: text/plain; charset=UTF-8\\n"\n\n' + entries.join('\n'));
     run(po2lmo, [po, lmo]);
     files[`usr/lib/lua/luci/i18n/luci-lan-reconnect.${language}.lmo`] = fs.readFileSync(lmo);
 }

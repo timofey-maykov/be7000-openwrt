@@ -1310,3 +1310,21 @@ msgstr "This is Ground-Zerro's roamd built for the BE7000. The install script fr
 
 msgid "Если компьютер остался в старой подсети, переподключитесь к сети или обновите адрес по DHCP. Страница откроется по новому адресу после восстановления связи."
 msgstr "If your computer still uses the previous subnet, reconnect to the network or renew its DHCP lease. The page will open at the new address once connectivity returns."
+
+msgid "Не удалось подтвердить настройки. Проверьте связь и попробуйте ещё раз до окончания отсчёта."
+msgstr "Could not confirm the settings. Check the connection and try again before the countdown ends."
+
+msgid "Подтвердить новые настройки"
+msgstr "Confirm new settings"
+
+msgid "До автоматического отката осталось %d с."
+msgstr "Automatic rollback in %d seconds."
+
+msgid "Время подтверждения истекло. Роутер возвращает прежние настройки."
+msgstr "The confirmation period has expired. The router is restoring the previous settings."
+
+msgid "Подтвердите изменения сети"
+msgstr "Confirm network changes"
+
+msgid "Есть изменения, ожидающие подтверждения. Если доступ к роутеру работает, подтвердите их, иначе настройки будут автоматически отменены."
+msgstr "Changes are waiting for confirmation. If you can access the router, confirm them; otherwise they will be rolled back automatically."

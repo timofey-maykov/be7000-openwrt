@@ -10,11 +10,32 @@ LuCI: confirm checked IPv4 address changes at the new address.
 
 Keep the rollback timer active until the new address accepts the one-time
 confirmation token. Preserve protocol, port and page when reconnecting.
+Recover pending confirmation after a fresh login, keep server and browser at
+120 seconds. Authenticated recovery uses POST, CSRF and the original owner.
 The feeds patch loop applies this to the pinned LuCI source for every theme.
 
 --- a/modules/luci-base/htdocs/luci-static/resources/ui.js
 +++ b/modules/luci-base/htdocs/luci-static/resources/ui.js
-@@ -5313,7 +5313,11 @@
+@@ -5130,10 +5130,17 @@
+ 	 */
+ 	changes: baseclass.singleton(/* @lends LuCI.ui.changes.prototype */ {
+ 		init() {
++			L.env.apply_rollback = 120;
+ 			if (!L.env.sessionid)
+ 				return;
+ 
+-			return uci.changes().then(L.bind(this.renderChangeIndicator, this));
++			return uci.changes().then(L.bind(this.renderChangeIndicator, this)).then(() => {
++				// init also runs on each uci-loaded event; offer recovery once per page.
++				if (!this.pending_checked) {
++					this.pending_checked = true;
++					return this.checkPendingApply();
++				}
++			});
+ 		},
+ 
+ 		/**
+@@ -5313,7 +5320,11 @@
  		 * @returns {Promise}
  		 */
  		checkConnectivityAffected() {
@@ -27,7 +48,7 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
  				if (L.isObject(info) && Array.isArray(info.inbound_interfaces)) {
  					for (let i = 0; i < info.inbound_interfaces.length; i++) {
  						const iif = info.inbound_interfaces[i];
-@@ -5321,17 +5325,79 @@
+@@ -5321,17 +5332,139 @@
  						for (let j = 0; this.changes && this.changes.network && j < this.changes.network.length; j++) {
  							const chg = this.changes.network[j];
  
@@ -107,10 +128,70 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
 +			]);
 +		},
 +
++		/** @private */
++		checkPendingApply() {
++			return request.request(L.url('admin/uci/pending_authenticated'), {
++				method: 'post', timeout: L.env.apply_timeout * 1000,
++				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
++				content: 'token=' + encodeURIComponent(L.env.token)
++			}).then(r => {
++				if (r.status !== 200)
++					return;
++				const pending = r.json();
++				if (!pending?.pending || typeof(pending.id) != 'string' || !(pending.remaining > 0))
++					return;
++
++				const deadline = Date.now() + pending.remaining * 1000;
++				let timer;
++				const countdown = E('p');
++				const error = E('p');
++				const button = E('button', {
++					'class': 'btn cbi-button-action important',
++					'click': () => {
++						button.disabled = true;
++						return request.request(L.url('admin/uci/confirm_authenticated'), {
++							method: 'post', timeout: L.env.apply_timeout * 1000,
++							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
++							content: 'token=' + encodeURIComponent(L.env.token) + '&apply_id=' + encodeURIComponent(pending.id)
++						}).then(reply => {
++							if (reply.status !== 200)
++								throw new Error('Confirmation rejected');
++							window.clearTimeout(timer);
++							document.dispatchEvent(new CustomEvent('uci-applied'));
++							this.setIndicator(0);
++							this.displayStatus('notice', E('p', _('Configuration changes applied.')));
++							window.setTimeout(() => { window.location.reload(); }, L.env.apply_display * 1000);
++						}).catch(() => {
++							error.textContent = _('Не удалось подтвердить настройки. Проверьте связь и попробуйте ещё раз до окончания отсчёта.');
++						}).finally(() => { button.disabled = Date.now() >= deadline; });
++					}
++				}, [ _('Подтвердить новые настройки') ]);
++				const tick = () => {
++					const remaining = Math.max(Math.ceil((deadline - Date.now()) / 1000), 0);
++					countdown.textContent = remaining
++						? _('До автоматического отката осталось %d с.').format(remaining)
++						: _('Время подтверждения истекло. Роутер возвращает прежние настройки.');
++					if (remaining)
++						timer = window.setTimeout(tick, 1000);
++					else
++						button.disabled = true;
++				};
++				this.displayStatus('warning', [
++					E('h4', _('Подтвердите изменения сети')),
++					E('p', _('Есть изменения, ожидающие подтверждения. Если доступ к роутеру работает, подтвердите их, иначе настройки будут автоматически отменены.')),
++					countdown, error,
++					E('div', { 'class': 'button-row' }, [ button, ' ', E('button', {
++						'class': 'btn', 'click': () => { window.clearTimeout(timer); this.displayStatus(false); }
++					}, [ _('Close') ]) ])
++				]);
++				tick();
++			}).catch(() => {});
++		},
++
  		/**
  		 * @private
  		 * @param {boolean} checked
-@@ -5417,7 +5483,7 @@
+@@ -5417,7 +5550,7 @@
  					window.clearTimeout(tt);
  					window.setTimeout(() => {
  						//UI.prototype.changes.displayStatus(false);
@@ -119,7 +200,7 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
  					}, L.env.apply_display * 1000);
  
  					return;
-@@ -5425,20 +5491,19 @@
+@@ -5425,20 +5558,19 @@
  
  				const delay = isNaN(duration) ? 0 : Math.max(1000 - duration, 0);
  				window.setTimeout(() => {
@@ -146,7 +227,15 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
  
  				if (now >= deadline)
  					return;
-@@ -5488,6 +5553,7 @@
+@@ -5474,6 +5606,7 @@
+ 		 * settings.
+ 		 */
+ 		apply(checked) {
++			L.env.apply_rollback = 120;
+ 			this.displayStatus('notice spinning',
+ 				E('p', _('Starting configuration apply…')));
+ 
+@@ -5488,6 +5621,7 @@
  					UI.prototype.changes.displayStatus('warning', [
  						E('h4', _('Connectivity change')),
  						E('p', _('Changes have been made to the existing connection via "%h". This could inhibit access to this device. Any IP change requires <strong>connecting to the new IP</strong> within %d seconds to retain the changes.').format(affected, L.env.apply_rollback)),
@@ -157,7 +246,97 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
 
 --- a/modules/luci-base/ucode/controller/admin/uci.uc
 +++ b/modules/luci-base/ucode/controller/admin/uci.uc
-@@ -136,6 +136,10 @@
+@@ -46,10 +46,10 @@
+ 
+ function uci_apply(rollback) {
+ 	if (rollback) {
+-		const timeout = +(config?.apply?.rollback ?? 90) || 0;
++		const timeout = 120;
+ 		const success = ubus_call('uci', 'apply', {
+ 			ubus_rpc_session: ctx.authsession,
+-			timeout: max(timeout, 90),
++			timeout,
+ 			rollback: true
+ 		});
+ 
+@@ -61,6 +61,8 @@
+ 				values: {
+ 					rollback: {
+ 						token,
++						id: dispatcher.randomid(16),
++						username: ctx.authuser,
+ 						session: ctx.authsession,
+ 						timeout: time() + timeout
+ 					}
+@@ -93,7 +95,7 @@
+ 	})?.values?.rollback;
+ 
+ 	if (type(data?.token) != 'string' || type(data?.session) != 'string' ||
+-	    type(data?.timeout) != 'int' || data.timeout < time()) {
++	    type(data?.timeout) != 'int' || data.timeout <= time()) {
+ 		last_ubus_error = STATUS_NO_DATA;
+ 
+ 		return false;
+@@ -117,7 +119,58 @@
+ }
+ 
+ 
++// Recover pending confirmation after a new login, without disclosing the token.
++function uci_pending_authenticated() {
++	if (type(ctx.authsession) != 'string' || type(ctx.authuser) != 'string' ||
++	    !ubus.call('session', 'access', {
++		ubus_rpc_session: ctx.authsession,
++		scope: 'ubus', object: 'uci', function: 'apply'
++	    })?.access) {
++		last_ubus_error = STATUS_PERMISSION_DENIED;
++		return null;
++	}
++
++	const data = ubus.call('session', 'get', {
++		ubus_rpc_session: '00000000000000000000000000000000',
++		keys: [ 'rollback' ]
++	})?.values?.rollback;
++
++	if (type(data?.token) != 'string' || type(data?.session) != 'string' ||
++	    type(data?.id) != 'string' || type(data?.timeout) != 'int' || data.timeout <= time()) {
++		last_ubus_error = STATUS_NO_DATA;
++		return null;
++	}
++	if (data.username != ctx.authuser) {
++		last_ubus_error = STATUS_PERMISSION_DENIED;
++		return null;
++	}
++	return data;
++}
++
+ return {
++	action_pending_authenticated: function() {
++		const data = uci_pending_authenticated();
++		http.header('Cache-Control', 'no-store');
++		if (!data && last_ubus_error != STATUS_NO_DATA) {
++			ubus_state_to_http(last_ubus_error);
++			return;
++		}
++		http.prepare_content('application/json; charset=UTF-8');
++		http.write_json(data ? { pending: true, id: data.id, remaining: data.timeout - time() } : { pending: false });
++	},
++
++	action_confirm_authenticated: function() {
++		const data = uci_pending_authenticated();
++		http.header('Cache-Control', 'no-store');
++		if (data) {
++			if (http.formvalue('apply_id') != data.id)
++				last_ubus_error = STATUS_PERMISSION_DENIED;
++			else
++				uci_confirm(data.token);
++		}
++		ubus_state_to_http(last_ubus_error);
++	},
++
+ 	action_apply_rollback: function() {
+ 		const token = uci_apply(true);
+ 
+@@ -136,6 +189,10 @@
  	},
  
  	action_confirm: function() {
@@ -168,4 +347,38 @@ The feeds patch loop applies this to the pinned LuCI source for every theme.
  		uci_confirm(http.formvalue('token'));
  		ubus_state_to_http(last_ubus_error);
  	},
+
+--- a/modules/luci-base/root/usr/share/luci/menu.d/luci-base.json
++++ b/modules/luci-base/root/usr/share/luci/menu.d/luci-base.json
+@@ -132,6 +132,30 @@
+ 		}
+ 	},
+ 
++	"admin/uci/pending_authenticated": {
++		"action": {
++			"type": "function",
++			"module": "luci.controller.admin.uci",
++			"function": "action_pending_authenticated",
++			"post": true
++		},
++		"auth": {
++			"methods": [ "cookie:sysauth_https", "cookie:sysauth_http" ]
++		}
++	},
++
++	"admin/uci/confirm_authenticated": {
++		"action": {
++			"type": "function",
++			"module": "luci.controller.admin.uci",
++			"function": "action_confirm_authenticated",
++			"post": true
++		},
++		"auth": {
++			"methods": [ "cookie:sysauth_https", "cookie:sysauth_http" ]
++		}
++	},
++
+ 	"admin/uci/confirm": {
+ 		"cors": true,
+ 		"action": {
 

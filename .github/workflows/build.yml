@@ -200,6 +200,9 @@ jobs:
           done
           node ../repo/scripts/test-luci-apply-reconnect.js \
             feeds/luci/modules/luci-base/htdocs/luci-static/resources/ui.js
+          node ../repo/scripts/test-luci-apply-reauth.js \
+            feeds/luci/modules/luci-base/ucode/controller/admin/uci.uc \
+            feeds/luci/modules/luci-base/root/usr/share/luci/menu.d/luci-base.json
           ./scripts/feeds install -a
 
       - name: Configure

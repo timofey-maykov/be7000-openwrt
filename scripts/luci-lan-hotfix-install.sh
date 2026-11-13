@@ -13,10 +13,11 @@ ROOT=${BE7000_HOTFIX_TEST_ROOT:-}
 ROOT=${ROOT%/}
 case "$ROOT" in ""|/*) ;; *) echo 'Test root must be absolute' >&2; exit 1 ;; esac
 BASE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-BACKUP="$ROOT/root/be7000-luci-lan-hotfix-v1"
+BACKUP="$ROOT/root/be7000-luci-lan-hotfix-v2"
 LOCK="$ROOT/tmp/be7000-luci-lan-hotfix.lock"
 FILES='www/luci-static/resources/ui.js
 usr/share/ucode/luci/controller/admin/uci.uc
+usr/share/luci/menu.d/luci-base.json
 usr/lib/lua/luci/i18n/luci-lan-reconnect.en.lmo
 usr/lib/lua/luci/i18n/luci-lan-reconnect.zh-cn.lmo'
 ACTIVE=0
@@ -75,7 +76,11 @@ restore_files() {
 }
 
 restart_web() {
+	local cache
 	[ -z "$ROOT" ] || return 0
+	for cache in /tmp/luci-indexcache.*; do
+		[ ! -f "$cache" ] || rm -f "$cache"
+	done
 	/etc/init.d/uhttpd restart
 }
 
@@ -157,7 +162,7 @@ apply_fix() {
 	ACTIVE=0
 	echo 'Hotfix installed. Router reboot and network restart are not required.'
 	echo 'Close old LuCI tabs, reopen LuCI and force-refresh the page (Ctrl+F5).'
-	echo 'Rollback: sh /root/be7000-luci-lan-hotfix-v1/hotfix.sh rollback'
+	echo 'Rollback: sh /root/be7000-luci-lan-hotfix-v2/hotfix.sh rollback'
 }
 
 rollback_fix() {

@@ -22,6 +22,11 @@ let end = source.indexOf('\n\t\t/**\n\t\t * Revert the staged', start);
 if (end < 0) end = source.indexOf('revert(){', start);
 assert(start > 0 && end > start, 'expected LuCI changes methods in ui.js');
 const methods = '({' + source.slice(start, end) + '\n})';
+const changesStart = source.search(/changes:\s*baseclass.singleton/);
+const initStart = source.indexOf('init()', changesStart);
+const initEnd = source.indexOf('setIndicator(', initStart);
+assert(changesStart > 0 && initEnd > initStart);
+const initMethod = '({' + source.slice(initStart, initEnd) + '\n})';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Exercise the actual controller action, not just permissive fixture headers.
@@ -61,7 +66,7 @@ function fixture({ config = { lan: { proto: 'static', ipaddr: '10.232.70.1/24' }
         _: value => value,
         E: (tag, attrs, children) => ({ tag, attrs, children }),
         fs: { exec_direct: async () => ({ inbound_interfaces: interfaces }) },
-        uci: { load: async () => [], get: (pkg, section, option) => config[section]?.[option] },
+        uci: { changes: async () => ({}), load: async () => [], get: (pkg, section, option) => config[section]?.[option] },
         validation: { parseIPv4: value => net.isIP(value) === 4 },
         request: { request: async (url, options) => {
             requests.push({ url, options });
@@ -81,6 +86,8 @@ function fixture({ config = { lan: { proto: 'static', ipaddr: '10.232.70.1/24' }
     vm.createContext(context);
     vm.runInContext("String.prototype.format = function(...args) { let i = 0; return this.replace(/%[hds]/g, () => String(args[i++])); };", context);
     const changesUI = vm.runInContext(methods, context);
+    changesUI.init = vm.runInContext(initMethod, context).init;
+    changesUI.renderChangeIndicator = () => {};
     changesUI.changes = { network: changes };
     changesUI.confirm_auth = { token: 'one-time-token&value' };
     changesUI.displayStatus = (type, content) => statuses.push({ type, content });
@@ -196,5 +203,48 @@ function fixture({ config = { lan: { proto: 'static', ipaddr: '10.232.70.1/24' }
     await f.changesUI.checkConnectivityAffected();
     assert.equal((await f.changesUI.confirmRequest(true)).reconnect_url,
         'http://10.232.71.1/cgi-bin/luci/admin/network/network');
+
+    // A new page, after login, has no in-memory token from the closed page.
+    let rejectConfirmation = true, reloaded = false;
+    f = fixture({ reply: url => url.endsWith('pending_authenticated')
+        ? { status: 200, json: () => ({ pending: true, id: 'pending-job', remaining: 95 }) }
+        : { status: rejectConfirmation ? 403 : 200 } });
+    delete f.changesUI.confirm_auth;
+    f.window.location.reload = () => { reloaded = true; };
+    await f.changesUI.init();
+    assert.equal(f.L.env.apply_rollback, 120);
+    assert.equal(f.requests.length, 1, 'login must not confirm without clicking');
+    await f.changesUI.init();
+    assert.equal(f.requests.length, 1, 'repeated uci-loaded events must not duplicate recovery dialogs');
+    const pendingDialog = f.statuses.find(s => s.type === 'warning').content;
+    const confirmButton = pendingDialog[4].children[0];
+    assert.equal(confirmButton.children[0], 'Подтвердить новые настройки');
+    assert.match(pendingDialog[2].textContent, /95/);
+    await confirmButton.attrs.click();
+    assert.equal(f.events.length, 0, 'a rejected confirmation is not success');
+    assert.match(pendingDialog[3].textContent, /Не удалось/);
+    assert.equal(confirmButton.disabled, false, 'allow retry before the deadline');
+    rejectConfirmation = false;
+    await confirmButton.attrs.click();
+    assert.deepEqual(f.events, ['uci-applied']);
+    assert.equal(f.requests[2].url, '/cgi-bin/luci/admin/uci/confirm_authenticated');
+    assert.equal(f.requests[2].options.content, 'token=csrf&apply_id=pending-job');
+    assert.equal(f.requests[2].options.query, undefined);
+    await f.advance(1100);
+    assert.equal(reloaded, true);
+
+    f = fixture({ reply: () => ({ status: 200, json: () => ({ pending: true, id: 'expiring-job', remaining: 2 }) }) });
+    await f.changesUI.init();
+    const expiredDialog = f.statuses.find(s => s.type === 'warning').content;
+    await f.advance(2500);
+    assert.equal(expiredDialog[4].children[0].disabled, true);
+    assert.match(expiredDialog[2].textContent, /истекло/);
+    assert.equal(f.requests.length, 1, 'expiry must not send a confirmation');
+    f = fixture({ reply: () => ({ status: 200, json: () => ({ pending: false }) }) });
+    await f.changesUI.init();
+    assert.equal(f.statuses.length, 0, 'no pending apply means no dialog');
+    f = fixture({ reply: () => ({ status: 403 }) });
+    await f.changesUI.init();
+    assert.equal(f.statuses.length, 0, 'unauthorized sessions cannot recover confirmation');
     console.log('LuCI checked-apply reconnect tests: OK');
 })().catch(error => { console.error(error); process.exitCode = 1; });
