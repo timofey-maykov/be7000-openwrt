@@ -2,6 +2,11 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.7**, November 14, 2026.
+- Fixed changing the LAN IPv4 address through LuCI: confirmation now goes to the new address, then the browser opens it. Previously LuCI kept contacting the old IP and the changes were rolled back.
+- Confirmation now has a 120-second window. If the original tab was closed, logging in at the new address shows a "Confirm new settings" button and the remaining time. Logging in does not restart the timer; unconfirmed changes are still rolled back.
+- Fixed the permanently disabled "Give the second slot back" button. It is available when `/overlay` fits on the separate data partition; the size check remains in place.
+
 **1.5.6**, November 8, 2026.
 - Fixed factory reset from LuCI or the button when `/overlay` lives on the joined volume, in the slot storage or on a USB drive. The image had no `od` utility, which the reset script used to generate its internal token, so the reset job was never created and LuCI showed "Erasing..." forever.
 - The QCA8084 no longer advertises EEE by default. With some link partners (Eltex and Huawei ISP ONTs at 1 Gbit/s) EEE caused a storm of rx CRC errors, UDP loss and link flaps, and the SoC MAC cannot signal LPI anyway. It can be turned back on with `ethtool --set-eee`.
