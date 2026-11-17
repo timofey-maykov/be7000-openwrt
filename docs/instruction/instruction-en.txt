@@ -1,4 +1,4 @@
-Beam WRT 1.5.7 for the Xiaomi BE7000
+Beam WRT 1.5.8 for the Xiaomi BE7000
 
 This is firmware based on OpenWrt with kernel 6.18. The instructions come in parts, read the one that fits your case.
 
@@ -21,6 +21,7 @@ openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi is the image for i
 install-from-stock.sh writes the image into the free slot and switches the boot to it.
 install-from-openwrt.sh is for a router running another OpenWrt with the factory bootloader, see the end of 1-install-en.txt.
 rollback-to-stock.sh takes the router back to the factory firmware. The System, Slots page does the same.
+repair-extroot.sh restores an already prepared USB extroot without formatting, run sh repair-extroot.sh --reboot. Firmware 1.5.8 includes the same command as be7000-extroot-repair --reboot.
 sha256sums.txt has the checksums.
 
 The file for updating an installed firmware (sysupgrade.bin) is not in the archive, it is a separate download in the same release.

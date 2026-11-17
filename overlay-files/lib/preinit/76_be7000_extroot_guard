@@ -42,6 +42,8 @@ be7000_extroot_guard() {
 	rm -f $EG_FWCFG
 	case "$n" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$n" -ge 2 ] || return 0
+	# The reset hook must not wait for or touch USB in this recovery boot.
+	touch /tmp/be7000-usb-disabled
 
 	echo "- be7000: the previous boot did not finish ($var=$n), starting without USB -"
 	echo "be7000: the previous boot did not finish ($var=$n), USB is off until the next boot" > /dev/kmsg 2>/dev/null

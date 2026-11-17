@@ -1,4 +1,4 @@
-Beam WRT 1.5.7，适用于小米 BE7000
+Beam WRT 1.5.8，适用于小米 BE7000
 
 这是基于 OpenWrt 的固件，内核版本 6.18。说明分成几个部分，请阅读符合你情况的那一份。
 
@@ -21,6 +21,7 @@ openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi 是从原厂固件
 install-from-stock.sh 把镜像写入空闲的槽位，并把启动切换过去。
 install-from-openwrt.sh 用于路由器上装的是其他 OpenWrt 且使用原厂引导程序的情况，详见 1-install-zh.txt 末尾。
 rollback-to-stock.sh 让路由器回到原厂固件。系统, 槽位 页面也能做同样的事。
+repair-extroot.sh 可恢复已准备好的 USB extroot，不会格式化，使用 sh repair-extroot.sh --reboot 运行。1.5.8 固件内置相同的 be7000-extroot-repair --reboot 命令。
 sha256sums.txt 是校验值。
 
 用来升级已安装固件的文件 sysupgrade.bin 不在压缩包里，需要在同一个发布页面单独下载。

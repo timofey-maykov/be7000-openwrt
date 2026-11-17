@@ -3,7 +3,7 @@
 		"description": "Move /overlay onto a disk",
 		"read": {
 			"ubus": {
-				"be7000-storage": [ "status", "list", "job" ]
+				"be7000-storage": [ "status", "list", "job", "reset_status" ]
 			}
 		},
 		"write": {
@@ -11,7 +11,7 @@
 				"/usr/sbin/be7000-extroot": [ "exec" ]
 			},
 			"ubus": {
-				"be7000-storage": [ "use", "revert" ]
+				"be7000-storage": [ "use", "revert", "cancel_reset" ]
 			}
 		}
 	}

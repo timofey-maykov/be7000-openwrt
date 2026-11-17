@@ -17,6 +17,24 @@ var callList = rpc.declare({ object: 'be7000-storage', method: 'list' });
 var callUse = rpc.declare({ object: 'be7000-storage', method: 'use', params: ['device'] });
 var callRevert = rpc.declare({ object: 'be7000-storage', method: 'revert' });
 var callJob = rpc.declare({ object: 'be7000-storage', method: 'job' });
+var callResetStatus = rpc.declare({ object: 'be7000-storage', method: 'reset_status' });
+var callCancelReset = rpc.declare({ object: 'be7000-storage', method: 'cancel_reset', params: ['id'] });
+
+function resetReason(reason) {
+	switch (reason) {
+	case 'usb-disabled': return _('USB временно отключён после неудачной загрузки, повторите загрузку с подключённым накопителем');
+	case 'uuid-missing': return _('Накопитель прежнего extroot не найден, он мог быть отключён, заменён или отформатирован');
+	case 'mount-failed': return _('Не удалось подключить прежний накопитель, проверьте его подключение и файловую систему');
+	case 'token-mismatch': return _('На накопителе нет метки этого сброса, его содержимое оставлено без изменений');
+	case 'prepare-failed':
+	case 'cleanup-failed': return _('Не удалось очистить старый overlay, проверьте свободное место и состояние накопителя');
+	case 'restore-failed':
+	case 'marker-failed':
+	case 'unmount-failed': return _('Не удалось завершить сброс, проверьте накопитель и повторите загрузку');
+	case 'invalid-job': return _('Задание сброса повреждено, требуется диагностика через SSH');
+	default: return _('Сброс внешнего overlay не завершён, изменения extroot временно заблокированы');
+	}
+}
 
 // "use" only starts the job; wait for it here, polling every 2 s.
 function waitJob() {
@@ -54,7 +72,38 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			callStatus().catch(function() { return {}; }),
-			callList().catch(function() { return {}; })
+			callList().catch(function() { return {}; }),
+			callResetStatus().catch(function() { return {}; })
+		]);
+	},
+
+	handleCancelReset: function(reset) {
+		var self = this;
+		ui.showModal(_('Отменить незавершённый сброс'), [
+			E('p', {}, _('Старое задание будет отменено с сохранением копии во внутренней памяти')),
+			E('p', {}, _('Роутер останется на внутренней памяти, текущие настройки сохранятся, данные на прежнем накопителе не изменятся')),
+			E('p', {}, _('Это не завершает сброс до заводских настроек, после отмены можно заново настроить extroot')),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Назад')),
+				' ',
+				E('button', {
+					'class': 'btn cbi-button-negative',
+					'click': function(ev) {
+						ev.currentTarget.disabled = true;
+						callCancelReset(reset.id).then(function(res) {
+							ui.hideModal();
+							if (res && res.ok)
+								ui.addNotification(null, E('p', {}, _('Старое задание отменено, теперь можно настроить extroot заново')), 'info');
+							else
+								ui.addNotification(null, E('pre', {}, (res && res.output) || _('Не получилось')), 'error');
+							return self.reload();
+						}).catch(function(err) {
+							ui.hideModal();
+							ui.addNotification(null, E('p', {}, String(err)), 'error');
+						});
+					}
+				}, _('Отменить задание сброса'))
+			])
 		]);
 	},
 
@@ -132,6 +181,25 @@ return view.extend({
 		var self = this;
 		var status = (data[0] && data[0].data) || {};
 		var disks = (data[1] && data[1].data) || [];
+		var reset = (data[2] && data[2].ok && data[2].data) || {};
+		var blocked = reset.inspect_ok !== true || reset.pending === true;
+		var resetNotice = E('span');
+		if (reset.inspect_ok !== true) {
+			resetNotice = E('div', { 'class': 'alert-message warning' }, [
+				E('p', {}, _('Не удалось проверить состояние сброса, обновите страницу или проверьте системный журнал'))
+			]);
+		}
+		else if (reset.pending) {
+			resetNotice = E('div', { 'class': 'alert-message warning' }, [
+				E('strong', {}, _('Сброс не завершён')),
+				E('p', {}, resetReason(reset.reason)),
+				E('p', {}, [reset.device || '', reset.fstype || ''].filter(Boolean).join(' · ')),
+				reset.can_cancel ? E('button', {
+					'class': 'btn cbi-button-reset',
+					'click': function() { self.handleCancelReset(reset); }
+				}, _('Отменить задание сброса')) : E('span')
+			]);
+		}
 
 		var rows = [];
 		if (!disks.length) {
@@ -154,6 +222,7 @@ return view.extend({
 				else {
 					action = E('button', {
 						'class': 'btn cbi-button-action',
+						'disabled': blocked || null,
 						'click': function() { self.handleUse(d.device, d.model); }
 					}, _('Перенести сюда'));
 				}
@@ -171,6 +240,7 @@ return view.extend({
 
 		return E('div', { 'id': 'hf-storage' }, [
 			E('h2', {}, _('Накопитель')),
+			resetNotice,
 			E('p', {}, _('Всё, что роутер помнит между перезагрузками, лежит в /overlay. Это настройки, установленные пакеты и списки. Встроенного места немного, поэтому его можно перенести на USB-диск.')),
 
 			E('h3', {}, _('Сейчас')),
@@ -192,6 +262,7 @@ return view.extend({
 			onExternal ? E('p', {}, [
 				E('button', {
 					'class': 'btn cbi-button-reset',
+					'disabled': blocked || null,
 					'click': function() { self.handleRevert(); }
 				}, _('Вернуть на внутреннюю флешку'))
 			]) : E('span'),

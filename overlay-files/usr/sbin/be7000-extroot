@@ -53,28 +53,88 @@ bigoverlay_dev() {
 	return 1
 }
 
+# UCI batch returns zero even when every set failed because the package file
+# does not exist. Create fstab explicitly and use checked writes/read-back.
+ensure_fstab_config() (
+	local dir="$1" savedir
+	mkdir -p "$dir" || exit 1
+	[ ! -L "$dir/fstab" ] || exit 1
+	if [ ! -e "$dir/fstab" ]; then : > "$dir/fstab" || exit 1; fi
+	[ -f "$dir/fstab" ] || exit 1
+	savedir=$(mktemp -d /tmp/be7000-uci.XXXXXX) || exit 1
+	trap 'rm -rf "$savedir"' EXIT
+	if ! uci -q -c "$dir" -t "$savedir" get 'fstab.@global[0]' >/dev/null; then
+		uci -q -c "$dir" -t "$savedir" add fstab global >/dev/null || exit 1
+		uci -q -c "$dir" -t "$savedir" commit fstab || exit 1
+	fi
+)
+
+verify_extroot_config() (
+	local dir="$1" uuid="$2" savedir rc=0
+	savedir=$(mktemp -d /tmp/be7000-uci-check.XXXXXX) || return 1
+	trap 'rm -rf "$savedir"' EXIT
+	# Empty private savedir means these values must come from the committed file.
+	[ "$(uci -q -c "$dir" -t "$savedir" get fstab.extroot.uuid)" = "$uuid" ] &&
+	[ "$(uci -q -c "$dir" -t "$savedir" get fstab.extroot.target)" = /overlay ] &&
+	[ "$(uci -q -c "$dir" -t "$savedir" get fstab.extroot.fstype)" = ext4 ] &&
+	[ "$(uci -q -c "$dir" -t "$savedir" get fstab.extroot.enabled)" = 1 ] &&
+	[ "$(uci -q -c "$dir" -t "$savedir" get 'fstab.@global[0].delay_root')" -ge 15 ] 2>/dev/null || rc=1
+	return "$rc"
+)
+
+write_extroot_config() (
+	local dir="$1" uuid="$2" savedir delay
+	[ -n "$uuid" ] || exit 1
+	case "$uuid" in *[!A-Za-z0-9-]*) return 1 ;; esac
+	ensure_fstab_config "$dir" || exit 1
+	savedir=$(mktemp -d /tmp/be7000-uci.XXXXXX) || exit 1
+	trap 'rm -rf "$savedir"' EXIT
+	uci -q -c "$dir" -t "$savedir" set fstab.extroot=mount || exit 1
+	uci -q -c "$dir" -t "$savedir" set fstab.extroot.target=/overlay || exit 1
+	uci -q -c "$dir" -t "$savedir" set "fstab.extroot.uuid=$uuid" || exit 1
+	uci -q -c "$dir" -t "$savedir" set fstab.extroot.fstype=ext4 || exit 1
+	uci -q -c "$dir" -t "$savedir" set fstab.extroot.options=rw,noatime || exit 1
+	uci -q -c "$dir" -t "$savedir" set fstab.extroot.enabled=1 || exit 1
+	delay=$(uci -q -c "$dir" -t "$savedir" get 'fstab.@global[0].delay_root') || delay=0
+	if ! [ "$delay" -ge 15 ] 2>/dev/null; then
+		uci -q -c "$dir" -t "$savedir" set 'fstab.@global[0].delay_root=15' || exit 1
+	fi
+	uci -q -c "$dir" -t "$savedir" commit fstab || exit 1
+	verify_extroot_config "$dir" "$uuid"
+)
+
 # Run "uci -c <dir> batch" with stdin on the config dir of the overlay volume
 # <dev>. When /overlay is that volume, it is the live /etc/config.
+# With a UUID argument, write and verify the complete extroot configuration.
 with_volume_config() {
-	local dev="$1" dir mnt="" rc=0
-	if [ "$dev" = "$(current_overlay_device)" ]; then
-		uci -q batch
-		return $?
+	local dev="$1" uuid="${2:-}" dir cfg mnt="" rc=0 vol named="" name
+	vol="${dev#/dev/}"
+	name="${BE7000_RESET_SYS_UBI:-/sys/class/ubi}/$vol/name"
+	if [ -f "$name" ]; then
+		named="${vol%%_*}:$(cat "$name")"
 	fi
-	dir="$(mount | awk -v d="$dev" '$1 == d { print $3; exit }')"
-	if [ -z "$dir" ]; then
-		mnt=/tmp/extroot-vol.$$
-		mkdir -p "$mnt"
-		mount -t ubifs "$dev" "$mnt" || { rmdir "$mnt"; echo "cannot mount $dev" >&2; return 1; }
-		dir="$mnt"
+	dir=$(awk -v d="$dev" -v n="$named" -v v="$vol" '$1 == d || $1 == v || (n != "" && $1 == n) { print $2; exit }' \
+		"${BE7000_RESET_PROC_MOUNTS:-/proc/mounts}")
+	if [ "$dir" = "${BE7000_RESET_OVERLAY:-/overlay}" ]; then
+		cfg="${BE7000_EXTROOT_CONFIG:-/etc/config}"
+	else
+		if [ -z "$dir" ]; then
+			mnt=/tmp/extroot-vol.$$
+			mkdir -p "$mnt" || return 1
+			mount -t ubifs "$dev" "$mnt" || { rmdir "$mnt"; echo "cannot mount $dev" >&2; return 1; }
+			dir="$mnt"
+		fi
+		cfg="$dir/upper/etc/config"
 	fi
-	mkdir -p "$dir/upper/etc/config"
-	[ -f "$dir/upper/etc/config/fstab" ] || cp /rom/etc/config/fstab "$dir/upper/etc/config/fstab" 2>/dev/null || : > "$dir/upper/etc/config/fstab"
-	uci -q -c "$dir/upper/etc/config" get fstab.@global[0] >/dev/null ||
-		{ uci -q -c "$dir/upper/etc/config" add fstab global >/dev/null && uci -q -c "$dir/upper/etc/config" commit fstab; } || true
-	uci -q -c "$dir/upper/etc/config" batch || rc=1
+	if [ -n "$uuid" ]; then
+		write_extroot_config "$cfg" "$uuid" || rc=1
+	else
+		ensure_fstab_config "$cfg" && uci -q -c "$cfg" batch || rc=1
+	fi
 	sync
-	[ -n "$mnt" ] && { umount "$mnt"; rmdir "$mnt"; }
+	if [ -n "$mnt" ]; then
+		umount "$mnt" && rmdir "$mnt" || rc=1
+	fi
 	return $rc
 }
 
@@ -82,7 +142,7 @@ with_rootfs_data() {
 	local dev
 	be7000_factory_reset_pending && { echo "factory reset is pending" >&2; return 1; }
 	dev="$(rootfs_data_dev)" || { echo "rootfs_data volume not found" >&2; return 1; }
-	with_volume_config "$dev"
+	with_volume_config "$dev" "${1:-}"
 }
 
 current_overlay_device() {
@@ -202,7 +262,7 @@ cmd_status_json() {
 }
 
 cmd_use() {
-	local dev="$1" yes="$2" do_reboot="$3" uuid
+	local dev="$1" yes="$2" do_reboot="$3" uuid cfg="${BE7000_EXTROOT_CONFIG:-/etc/config}"
 	be7000_factory_reset_pending && die "factory reset is pending; extroot changes are deferred"
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
 	[ -b "$dev" ] || die "$dev is not a block device"
@@ -221,6 +281,7 @@ cmd_use() {
 	fi
 
 	command -v mkfs.ext4 >/dev/null || die "mkfs.ext4 is missing"
+	ensure_fstab_config "$cfg" || die "cannot prepare fstab, drive was not formatted"
 
 	echo "Formatting $dev"
 	mkfs.ext4 -q -F -L "$LABEL" "$dev"
@@ -232,23 +293,12 @@ cmd_use() {
 	[ -n "$uuid" ] || die "cannot read the UUID of $dev"
 
 	# Settings first, so the copy on the disk already has its fstab entry.
-	uci -q batch <<-EOT
-		set fstab.extroot=mount
-		set fstab.extroot.target='/overlay'
-		set fstab.extroot.uuid='$uuid'
-		set fstab.extroot.fstype='ext4'
-		set fstab.extroot.options='rw,noatime'
-		set fstab.extroot.enabled='1'
-		commit fstab
-	EOT
-	# USB disks need a few seconds to show up in preinit.
-	[ "$(uci -q get fstab.@global[0].delay_root)" -ge 15 ] 2>/dev/null || {
-		uci -q set fstab.@global[0].delay_root='15' && uci -q commit fstab
-	}
+	write_extroot_config "$cfg" "$uuid" || die "could not save and verify the extroot settings"
 	echo "Copying the current overlay across"
 	# /overlay holds upper/ and work/; copy the contents, not the mount point.
 	cp -a /overlay/. "$MNT"/ 2>/dev/null || true
 	mkdir -p "$MNT/upper" "$MNT/work"
+	verify_extroot_config "$MNT/upper/etc/config" "$uuid" || die "copied extroot settings did not verify"
 	# On the disk bigoverlay must be off, otherwise its boot script reboots to
 	# "switch /overlay back" to mtd28. Only there: the internal settings keep
 	# whatever the user chose.
@@ -263,16 +313,7 @@ cmd_use() {
 	# This is the fstab fstools actually reads at boot. The extroot entry sorts
 	# before bigoverlay (UUID against "ubi1_*"), so it wins while the disk is
 	# there; without the disk the router boots on the slot's small overlay.
-	with_rootfs_data <<-EOT || die "could not write the extroot entry into rootfs_data"
-		set fstab.extroot=mount
-		set fstab.extroot.target='/overlay'
-		set fstab.extroot.uuid='$uuid'
-		set fstab.extroot.fstype='ext4'
-		set fstab.extroot.options='rw,noatime'
-		set fstab.extroot.enabled='1'
-		set fstab.@global[0].delay_root='15'
-		commit fstab
-	EOT
+	with_rootfs_data "$uuid" || die "could not write and verify the extroot entry in rootfs_data"
 
 	echo "Done. The change takes effect on the next boot."
 	if [ "$do_reboot" = 1 ]; then sync; reboot; fi
@@ -434,12 +475,17 @@ for a in "$@"; do [ "$a" = "--json" ] && JSON=1; done
 
 case "$ACTION" in
 status) [ $JSON = 1 ] && cmd_status_json || cmd_status ;;
+reset-status) be7000_reset_status_json ;;
+cancel-reset)
+	[ "$YES" = 1 ] || die "usage: be7000-extroot cancel-reset <id> --yes"
+	be7000_reset_cancel "$DEV"
+	;;
 list)   [ $JSON = 1 ] && cmd_list_json || cmd_list ;;
 use)    cmd_use "$DEV" "$YES" "$REBOOT" ;;
 revert) cmd_revert "$YES" "$REBOOT" ;;
 boot-sync) cmd_boot_sync ;;
 *)
-	echo "usage: be7000-extroot {status|list|use <device> [--yes] [--reboot]|revert [--yes] [--reboot]}"
+	echo "usage: be7000-extroot {status|list|reset-status|cancel-reset <id> --yes|use <device> [--yes] [--reboot]|revert [--yes] [--reboot]}"
 	exit 1
 	;;
 esac

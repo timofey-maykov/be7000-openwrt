@@ -2,6 +2,14 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.8**, November 17, 2026.
+- Fixed USB extroot setup after factory reset, the wizard creates a missing `fstab` before formatting and verifies committed settings before reporting success.
+- Reset waits up to 15 seconds for USB and finds the original filesystem by UUID, device renaming no longer prevents completion.
+- System, Storage shows why reset stopped and offers cancellation with a backup, keeping current settings on internal storage.
+- The image includes `be7000-extroot-repair --reboot`, it detects an already prepared USB extroot and its UUID, backs up settings and restores mounting without formatting.
+- The same `repair-extroot.sh` is attached to the release and included in the ZIP for older versions, Rootux confirmed recovery on a BE7000.
+- Added Tailscale to the package feed, install with `apk update && apk add tailscale`. It is not included in the firmware image.
+
 **1.5.7**, November 14, 2026.
 - Fixed changing the LAN IPv4 address through LuCI: confirmation now goes to the new address, then the browser opens it. Previously LuCI kept contacting the old IP and the changes were rolled back.
 - Confirmation now has a 120-second window. If the original tab was closed, logging in at the new address shows a "Confirm new settings" button and the remaining time. Logging in does not restart the timer; unconfirmed changes are still rolled back.

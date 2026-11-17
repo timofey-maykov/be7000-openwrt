@@ -68,6 +68,8 @@ mount() {
 		MOCK_RD_MOUNT="$dest"
 		;;
 	*/target)
+		MOCK_TARGET_ATTEMPTS=$((${MOCK_TARGET_ATTEMPTS:-0} + 1))
+		[ "$MOCK_TARGET_ATTEMPTS" -gt "${MOCK_TARGET_DELAY:-0}" ] || return 1
 		[ "${MOCK_FAIL_TARGET_MOUNT:-0}" = 0 ] || return 1
 		backing="$MOCK_TARGET_BACKING"
 		MOCK_TARGET_MOUNT="$dest"
@@ -75,6 +77,14 @@ mount() {
 	*) fail "unexpected mount target $dest" ;;
 	esac
 	copy_tree "$backing" "$dest"
+}
+
+block() { printf '%s\n' "${MOCK_BLOCK_INFO:-}"; }
+uci() {
+	case "$*" in
+	*'get fstab.extroot.uuid') [ -n "${MOCK_SAVED_UUID:-}" ] && printf '%s\n' "$MOCK_SAVED_UUID"; return $? ;;
+	esac
+	return 1
 }
 
 umount() {
@@ -152,6 +162,19 @@ assert_eq "$(cat "$S/overlay/upper/etc/config/old")" old-upper "active upper cha
 assert_eq "$(cat "$S/overlay/work/work/state")" old-work "active work changed while scheduling"
 [ ! -s "$S/calls" ] || fail "non-r scheduling rebooted"
 
+setup_schedule_case usb_uuid
+printf '%s\n' '/dev/sda /overlay ext4 rw,noatime 0 0' > "$FB_PROC_MOUNTS"
+MOCK_BLOCK_INFO='/dev/sda: UUID="12345678-abcd" TYPE="ext4"'
+(be7000_firstboot_main -y)
+MOCK_BLOCK_INFO=
+assert_eq "$(cat "$S/rd/$JOB/uuid")" 12345678-abcd "scheduled USB identity"
+
+setup_schedule_case usb_no_identity
+printf '%s\n' '/dev/sda /overlay ext4 rw,noatime 0 0' > "$FB_PROC_MOUNTS"
+if (be7000_firstboot_main -y) >/dev/null 2>&1; then fail "USB reset scheduled without a filesystem identity"; fi
+assert_absent "$S/rd/$JOB" "unidentified USB reset job"
+assert_absent "$S/overlay/$MARK" "unidentified USB reset marker"
+
 setup_schedule_case reboot_keep
 (be7000_firstboot_main -y -r -k)
 assert_eq "$(cat "$S/rd/$JOB/keep")" 1 "scheduled -k flag"
@@ -191,6 +214,7 @@ INITRAMFS=1
 . "$ROOT/overlay-files/lib/preinit/77_be7000_slot_storage"
 bfr_log() { echo "$*" >> "$MOCK_CALLS"; }
 bfr_rootfs_data() { printf '%s\n' /dev/ubi0_2; }
+bfr_usb_disabled() { [ "${MOCK_USB_DISABLED:-0}" = 1 ]; }
 bfr_fatal() {
 	MOCK_FATAL=1
 	echo "fatal:$*" >> "$MOCK_CALLS"
@@ -372,6 +396,7 @@ grep -F -- '-t ubifs -o rw,noatime /dev/ubi2_0' "$MOCK_MOUNTS" >/dev/null ||
 	fail "slot-storage target was not mounted by its recorded device"
 
 # A USB device without the matching marker must remain untouched.
+MOCK_TARGET_ATTEMPTS=0
 setup_run_case usb_mismatch /dev/sda1 ext4 0
 printf '%s\n' fedcba9876543210fedcba9876543210 > "$MOCK_TARGET_BACKING/$BFR_MARK"
 bfr_run
@@ -382,6 +407,62 @@ assert_extroot_blocked "$MOCK_RD_BACKING"
 assert_file "$MOCK_TARGET_BACKING/sysupgrade.tgz" "token mismatch sysupgrade"
 grep -F -- '-t ext4 -o rw,noatime /dev/sda1' "$MOCK_MOUNTS" >/dev/null ||
 	fail "USB target was not mounted by its recorded device and filesystem"
+
+# A /dev node which is not ready on the first attempts must not strand reset.
+setup_run_case usb_late /dev/sda ext4 0
+MOCK_TARGET_ATTEMPTS=0
+MOCK_TARGET_DELAY=3
+bfr_run
+MOCK_TARGET_DELAY=0
+assert_eq "$MOCK_TARGET_ATTEMPTS" 4 "late USB mount attempts"
+assert_fresh_target "$MOCK_TARGET_BACKING"
+assert_absent "$MOCK_RD_BACKING/$BFR_JOB" "late USB reset completed"
+
+# UUID identity follows the original filesystem when USB names change.
+setup_run_case usb_renamed /dev/sda ext4 0
+printf '%s\n' 12345678-abcd > "$MOCK_RD_BACKING/$BFR_JOB/uuid"
+MOCK_BLOCK_INFO='/dev/sda: UUID="different-disk" TYPE="ext4"
+/dev/sdb1: UUID="12345678-abcd" TYPE="ext4"'
+bfr_run
+MOCK_BLOCK_INFO=
+grep -F -- '-t ext4 -o rw,noatime /dev/sdb1' "$MOCK_MOUNTS" >/dev/null ||
+	fail "reset did not follow the filesystem UUID"
+if grep -F -- '-t ext4 -o rw,noatime /dev/sda ' "$MOCK_MOUNTS" >/dev/null; then
+	fail "reset mounted a different disk at the old device name"
+fi
+assert_fresh_target "$MOCK_TARGET_BACKING"
+
+# Legacy jobs use the UUID in their preserved extroot configuration.
+setup_run_case usb_legacy_uuid /dev/sda ext4 0
+MOCK_SAVED_UUID=12345678-abcd
+MOCK_BLOCK_INFO='/dev/sdc1: UUID="12345678-abcd" TYPE="ext4"'
+bfr_run
+MOCK_BLOCK_INFO= MOCK_SAVED_UUID=
+grep -F -- '-t ext4 -o rw,noatime /dev/sdc1' "$MOCK_MOUNTS" >/dev/null ||
+	fail "legacy reset did not use the preserved filesystem identity"
+assert_fresh_target "$MOCK_TARGET_BACKING"
+
+# Formatting/replacing a disk must leave it alone and retain a cancellable job.
+setup_run_case usb_reformatted /dev/sda ext4 0
+printf '%s\n' 12345678-abcd > "$MOCK_RD_BACKING/$BFR_JOB/uuid"
+MOCK_BLOCK_INFO='/dev/sda1: UUID="6AFC-86D9" TYPE="exfat"'
+MOCK_TARGET_MOUNT=
+bfr_run
+MOCK_BLOCK_INFO=
+[ -z "$MOCK_TARGET_MOUNT" ] || fail "reset mounted a reformatted disk"
+assert_eq "$(cat "$MOCK_RD_BACKING/$BFR_JOB/error")" uuid-missing "reformatted disk failure reason"
+assert_eq "$(cat "$MOCK_TARGET_BACKING/upper/etc/config/old")" old-setting "reformatted disk data changed"
+assert_extroot_blocked "$MOCK_RD_BACKING"
+
+# Recovery boots deliberately disable USB, the reset hook must respect that.
+setup_run_case usb_disabled /dev/sda ext4 0
+MOCK_USB_DISABLED=1
+MOCK_TARGET_MOUNT=
+bfr_run
+MOCK_USB_DISABLED=0
+[ -z "$MOCK_TARGET_MOUNT" ] || fail "reset accessed USB during the recovery boot"
+assert_eq "$(cat "$MOCK_RD_BACKING/$BFR_JOB/error")" usb-disabled "USB recovery reason"
+assert_extroot_blocked "$MOCK_RD_BACKING"
 
 # If the target is unavailable, no target mutation occurs and the job retries.
 setup_run_case mount_failure /dev/sda1 ext4 0

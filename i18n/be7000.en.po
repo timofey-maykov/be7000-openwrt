@@ -1328,3 +1328,54 @@ msgstr "Confirm network changes"
 
 msgid "Есть изменения, ожидающие подтверждения. Если доступ к роутеру работает, подтвердите их, иначе настройки будут автоматически отменены."
 msgstr "Changes are waiting for confirmation. If you can access the router, confirm them; otherwise they will be rolled back automatically."
+
+msgid "USB временно отключён после неудачной загрузки, повторите загрузку с подключённым накопителем"
+msgstr "USB was temporarily disabled after a failed boot, reboot with the drive connected"
+
+msgid "Накопитель прежнего extroot не найден, он мог быть отключён, заменён или отформатирован"
+msgstr "The previous extroot filesystem was not found, the drive may be disconnected, replaced or formatted"
+
+msgid "Не удалось подключить прежний накопитель, проверьте его подключение и файловую систему"
+msgstr "Could not mount the previous drive, check its connection and filesystem"
+
+msgid "На накопителе нет метки этого сброса, его содержимое оставлено без изменений"
+msgstr "The drive has no matching reset marker, its contents were left unchanged"
+
+msgid "Не удалось очистить старый overlay, проверьте свободное место и состояние накопителя"
+msgstr "Could not clear the old overlay, check free space and drive health"
+
+msgid "Не удалось завершить сброс, проверьте накопитель и повторите загрузку"
+msgstr "Could not finish the reset, check the drive and reboot"
+
+msgid "Задание сброса повреждено, требуется диагностика через SSH"
+msgstr "The reset job is damaged, SSH diagnostics are required"
+
+msgid "Сброс внешнего overlay не завершён, изменения extroot временно заблокированы"
+msgstr "The external overlay reset is incomplete, extroot changes are temporarily blocked"
+
+msgid "Отменить незавершённый сброс"
+msgstr "Cancel the incomplete reset"
+
+msgid "Старое задание будет отменено с сохранением копии во внутренней памяти"
+msgstr "The old job will be cancelled with a backup kept in internal storage"
+
+msgid "Роутер останется на внутренней памяти, текущие настройки сохранятся, данные на прежнем накопителе не изменятся"
+msgstr "The router will keep using internal storage with its current settings, data on the previous drive will not change"
+
+msgid "Это не завершает сброс до заводских настроек, после отмены можно заново настроить extroot"
+msgstr "This does not complete a factory reset, extroot can be set up again after cancellation"
+
+msgid "Старое задание отменено, теперь можно настроить extroot заново"
+msgstr "The old job was cancelled, extroot can now be set up again"
+
+msgid "Отменить задание сброса"
+msgstr "Cancel reset job"
+
+msgid "Не удалось проверить состояние сброса, обновите страницу или проверьте системный журнал"
+msgstr "Could not check reset status, refresh the page or check the system log"
+
+msgid "Сброс не завершён"
+msgstr "Reset incomplete"
+
+msgid "Назад"
+msgstr "Back"

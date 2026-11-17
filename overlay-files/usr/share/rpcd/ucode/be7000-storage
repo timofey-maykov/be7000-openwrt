@@ -59,6 +59,18 @@ return {
 	'be7000-storage': {
 		status: query('status'),
 		list: query('list'),
+		reset_status: query('reset-status'),
+		cancel_reset: {
+			args: { id: '' },
+			call: function(req) {
+				let id = req.args?.id ?? '';
+				if (!match(id, /^[0-9a-f]{64}$/))
+					return { ok: false, output: 'invalid reset id' };
+				if (access(JOB_LOG) && !access(JOB_RC))
+					return { ok: false, output: 'already running' };
+				return run(['cancel-reset', id, '--yes']);
+			}
+		},
 		use: {
 			args: { device: '' },
 			call: function(req) {

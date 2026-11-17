@@ -122,6 +122,14 @@ mkdir -p "$tmp/config" || abort_schedule "cannot create the reset job"
 token=$(hexdump -v -n 16 -e '1/1 "%02x"' /dev/urandom 2>/dev/null | tr -d ' \n')
 token_valid "$token" || abort_schedule "cannot generate the reset token"
 
+# Record filesystem identity as well as the current /dev name. The latter can
+# change when USB enumeration order changes on the next boot.
+if [ "$ovtype" != ubifs ]; then
+	uuid=$(block info "$ov" 2>/dev/null | sed -n 's/.*UUID="\([A-Za-z0-9-]*\)".*/\1/p')
+	[ -n "$uuid" ] || abort_schedule "cannot identify the external filesystem"
+	printf '%s\n' "$uuid" > "$tmp/uuid" || abort_schedule "cannot preserve the filesystem identity"
+fi
+
 printf '%s\n' 1 > "$tmp/version" || abort_schedule "cannot write the reset job"
 printf '%s\n' "$ov" > "$tmp/device" || abort_schedule "cannot write the reset job"
 printf '%s\n' "$ovtype" > "$tmp/fstype" || abort_schedule "cannot write the reset job"

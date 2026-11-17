@@ -108,6 +108,58 @@ bfr_write_token() {
 	printf '%s\n' "$1" > "$2"
 }
 
+bfr_error() {
+	local job="$1" reason="$2"
+	printf '%s\n' "$reason" > "$job/error.new" &&
+		mv "$job/error.new" "$job/error"
+	sync
+}
+
+bfr_usb_disabled() {
+	[ -e /tmp/be7000-usb-disabled ]
+}
+
+# USB and its /dev nodes may appear after the early hook starts. A UUID also
+# keeps a second disk from taking the old device name after a reboot. Older
+# jobs have no uuid field, but their preserved fstab normally has it.
+bfr_mount_target() {
+	local job="$1" device="$2" fstype="$3" target="$4" uuid="" info candidate i=0
+	BFR_MOUNT_ERROR=mount-failed
+	case "$fstype" in
+	ubifs) mount -t "$fstype" -o rw,noatime "$device" "$target" 2>/dev/null; return $? ;;
+	esac
+	if bfr_usb_disabled; then
+		BFR_MOUNT_ERROR=usb-disabled
+		return 1
+	fi
+	uuid=$(bfr_field "$job/uuid" 2>/dev/null) || uuid=
+	if [ -z "$uuid" ]; then
+		uuid=$(uci -q -c "$job/config" get fstab.extroot.uuid 2>/dev/null) || uuid=
+	fi
+	case "$uuid" in *[!A-Za-z0-9-]*) BFR_MOUNT_ERROR=invalid-job; return 1 ;; esac
+	while :; do
+		candidate="$device"
+		if [ -n "$uuid" ]; then
+			candidate=""
+			info=$(block info 2>/dev/null)
+			candidate=$(printf '%s\n' "$info" | awk -v u="\"$uuid\"" '
+				{ for (i=2; i<=NF; i++) if ($i == "UUID=" u) {
+					sub(/:$/, "", $1); print $1; exit
+				} }')
+			BFR_MOUNT_ERROR=uuid-missing
+		fi
+		if [ -n "$candidate" ] && bfr_device_valid "$candidate"; then
+			if mount -t "$fstype" -o rw,noatime "$candidate" "$target" 2>/dev/null; then
+				return 0
+			fi
+			BFR_MOUNT_ERROR=mount-failed
+		fi
+		[ "$i" -lt 15 ] || return 1
+		sleep 1
+		i=$((i + 1))
+	done
+}
+
 # mount_root reads extroot configuration from rootfs_data before it mounts the
 # real overlay. Hide that configuration while a reset is pending, otherwise a
 # failed rebuild could be selected as /overlay later in this same boot. The
@@ -304,7 +356,8 @@ bfr_run() {
 		return 0
 	fi
 
-	if ! mount -t "$fstype" -o rw,noatime "$device" "$target" 2>/dev/null; then
+	if ! bfr_mount_target "$job" "$device" "$fstype" "$target"; then
+		bfr_error "$job" "$BFR_MOUNT_ERROR"
 		bfr_log "cannot mount $device, reset job left for retry"
 		bfr_close_rd "$rdmnt"
 		return 0
@@ -313,15 +366,18 @@ bfr_run() {
 	ready="$target/.be7000_factory_reset_ready.$token"
 	if [ "$prepared" != "$token" ]; then
 		if [ "$marker" != "$token" ] || [ ! -f "$target/$BFR_MARK" ] || [ -L "$target/$BFR_MARK" ]; then
+			bfr_error "$job" token-mismatch
 			bfr_leave_retry "$target" "$rdmnt" "reset token does not match $device, nothing changed"
 			return 0
 		fi
 		if ! bfr_prepare_target "$target" "$job" "$token"; then
+			bfr_error "$job" prepare-failed
 			bfr_leave_retry "$target" "$rdmnt" "could not prepare a fresh overlay, reset job left for retry"
 			return 0
 		fi
 
 		if ! bfr_cleanup_target "$target" "$job" "$token" "$keep"; then
+			bfr_error "$job" cleanup-failed
 			bfr_leave_retry "$target" "$rdmnt" "could not remove the old overlay, reset job left for retry"
 			return 0
 		fi
@@ -329,6 +385,7 @@ bfr_run() {
 		# those changes are durable, then sync rootfs_data separately.
 		if ! printf '%s\n' "$token" > "$job/prepared.new" ||
 		   ! mv "$job/prepared.new" "$job/prepared"; then
+			bfr_error "$job" prepare-failed
 			bfr_leave_retry "$target" "$rdmnt" "could not finish the fresh overlay, reset job left for retry"
 			return 0
 		fi
@@ -337,20 +394,24 @@ bfr_run() {
 		# Repeat target cleanup because prepared and the target live on
 		# different filesystems and may reach stable storage in either order.
 		bfr_cleanup_target "$target" "$job" "$token" "$keep" || {
+			bfr_error "$job" cleanup-failed
 			bfr_leave_retry "$target" "$rdmnt" "prepared overlay cleanup did not verify, reset job kept"
 			return 0
 		}
 	fi
 	if ! bfr_restore_extroot "$rdmnt" "$job"; then
+		bfr_error "$job" restore-failed
 		bfr_leave_retry "$target" "$rdmnt" "cannot restore extroot configuration, reset job kept"
 		return 0
 	fi
 	if ! rm -f "$target/$BFR_MARK" "$ready"; then
+		bfr_error "$job" marker-failed
 		bfr_leave_retry "$target" "$rdmnt" "cannot remove reset markers, reset job left for retry"
 		return 0
 	fi
 	sync
 	if ! umount "$target"; then
+		bfr_error "$job" unmount-failed
 		bfr_log "cannot unmount the fresh overlay, reset job left for retry"
 		umount "$rdmnt" 2>/dev/null
 		return 0
@@ -367,6 +428,7 @@ bfr_run() {
 		}
 	fi
 	if ! mv "$job" "$done"; then
+		bfr_error "$job" cleanup-failed
 		bfr_log "cannot publish completed reset state"
 		umount "$rdmnt" 2>/dev/null
 		return 0

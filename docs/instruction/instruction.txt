@@ -1,4 +1,4 @@
-Beam WRT 1.5.7 для Xiaomi BE7000
+Beam WRT 1.5.8 для Xiaomi BE7000
 
 Это прошивка на основе OpenWrt с ядром 6.18. Инструкция разбита на части, читайте ту, что подходит под ваш случай.
 
@@ -21,6 +21,7 @@ openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi это образ 
 install-from-stock.sh ставит образ в свободный слот и переключает загрузку на него.
 install-from-openwrt.sh нужен, если сейчас стоит другая OpenWrt с заводским загрузчиком, подробнее в конце 1-install.txt.
 rollback-to-stock.sh возвращает роутер на заводскую прошивку. То же самое делает страница Система, Слоты.
+repair-extroot.sh восстанавливает уже подготовленный USB extroot без форматирования, запуск sh repair-extroot.sh --reboot, в прошивке 1.5.8 есть та же команда be7000-extroot-repair --reboot.
 sha256sums.txt это контрольные суммы.
 
 Файла для обновления уже стоящей прошивки (sysupgrade.bin) в архиве нет, он лежит в том же релизе отдельно.

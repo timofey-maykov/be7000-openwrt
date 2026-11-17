@@ -123,6 +123,9 @@ jobs:
           fi
           mkdir -p files
           cp -a ../repo/overlay-files/. files/
+          # One source for the built-in recovery command and release download.
+          install -m 0755 ../repo/scripts/repair-extroot.sh files/usr/sbin/be7000-extroot-repair
+          cmp ../repo/scripts/repair-extroot.sh files/usr/sbin/be7000-extroot-repair
           # a debug-* tag ships extra diagnostics and experiments on top
           case "${{ github.ref_name }}" in
             debug-*) cp -a ../repo/overlay-files-debug/. files/; echo "debug overlay added" ;;
@@ -247,6 +250,7 @@ jobs:
             } >> .config
           fi
           make defconfig
+          grep -q '^CONFIG_PACKAGE_tailscale=m$' .config || { echo "::error::tailscale is missing from the package feed configuration"; exit 1; }
           grep -E '^CONFIG_VERSION_NUMBER|^# CONFIG_VERSION_FILENAMES' .config || true
           # A debug-* build only has to produce the image: nothing it builds
           # is published to the feed, and packages built as modules (=m) are
@@ -347,12 +351,18 @@ jobs:
             *) ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug ;;
           esac
           test -L build_dir/target-*/root-qualcommbe/etc/rc.d/S99be7000-bootconfirm
+          test -x build_dir/target-*/root-qualcommbe/usr/sbin/be7000-extroot-repair
+          cmp ../repo/scripts/repair-extroot.sh build_dir/target-*/root-qualcommbe/usr/sbin/be7000-extroot-repair
           # the marker of a local slot-0 test build turns off boot confirmation
           ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-test
 
       - name: Publish the feed
         if: "!startsWith(github.ref, 'refs/tags/debug-') && !inputs.warm"
         run: |
+          compgen -G "owrt/bin/packages/$ARCH/packages/tailscale-*.apk" >/dev/null || {
+            echo "::error::tailscale package was not built" >&2; exit 1; }
+          ! grep -q '^tailscale ' "owrt/bin/targets/$TARGET/$DEVICE.manifest" || {
+            echo "::error::tailscale must be installable from the feed, not included in the image" >&2; exit 1; }
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
           cd pages
@@ -397,9 +407,10 @@ jobs:
           cp "../owrt/bin/targets/$TARGET/$DEVICE-squashfs-factory.ubi" .
           cp "../owrt/bin/targets/$TARGET/$DEVICE-squashfs-sysupgrade.bin" .
           cp "../owrt/bin/targets/$TARGET/$DEVICE.manifest" .
-          sha256sum "$DEVICE-squashfs-factory.ubi" "$DEVICE-squashfs-sysupgrade.bin" > sha256sums.txt
+          cp ../repo/scripts/repair-extroot.sh .
+          sha256sum "$DEVICE-squashfs-factory.ubi" "$DEVICE-squashfs-sysupgrade.bin" repair-extroot.sh > sha256sums.txt
           cp "$DEVICE-squashfs-factory.ubi" ../repo/scripts/install-from-stock.sh ../repo/scripts/install-from-openwrt.sh \
-             ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
+             ../repo/scripts/rollback-to-stock.sh repair-extroot.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
           # the three indexes start with "Beam WRT <version>" in every language
           for f in zip/instruction.txt zip/instruction-en.txt zip/instruction-zh.txt; do
             sed -E -i "1s/^Beam WRT [0-9]+(\.[0-9]+)*/Beam WRT $VER/" "$f"
@@ -424,7 +435,7 @@ jobs:
             args=(--generate-notes)
           fi
           assets=("$ZIP" "$DEVICE-squashfs-factory.ubi" \
-                  "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt)
+                  "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" repair-extroot.sh sha256sums.txt)
           # A release for this tag may already exist (created by hand, or a
           # rerun): then just replace its files rather than fail at the end.
           if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
