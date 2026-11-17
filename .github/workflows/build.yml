@@ -247,6 +247,8 @@ jobs:
             } >> .config
           fi
           make defconfig
+          echo "===== MINIDLNA CONFIG AFTER DEFCONFIG ====="
+          grep -E '^(CONFIG_PACKAGE_(minidlna|luci-app-minidlna|libffmpeg|ffmpeg)=|# CONFIG_PACKAGE_(minidlna|luci-app-minidlna|libffmpeg|ffmpeg) is not set)' .config || true
           grep -E '^CONFIG_VERSION_NUMBER|^# CONFIG_VERSION_FILENAMES' .config || true
           # A debug-* build only has to produce the image: nothing it builds
           # is published to the feed, and packages built as modules (=m) are
