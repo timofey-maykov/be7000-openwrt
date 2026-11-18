@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**After 1.5.8**, package feed.
+- Fixed MiniDLNA selection, FFmpeg hardware defaults no longer hide the server and LuCI on BE7000, and the current `libffmpeg` package name is used.
+- Added compatibility with the FFmpeg channel layout API and checks for resolved Kconfig settings and required APK files before publication. Installing these packages does not require reflashing.
+
 **1.5.8**, November 17, 2026.
 - Fixed USB extroot setup after factory reset, the wizard creates a missing `fstab` before formatting and verifies committed settings before reporting success.
 - Reset waits up to 15 seconds for USB and finds the original filesystem by UUID, device renaming no longer prevents completion.

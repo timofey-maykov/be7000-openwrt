@@ -250,7 +250,8 @@ jobs:
             } >> .config
           fi
           make defconfig
-          grep -q '^CONFIG_PACKAGE_tailscale=m$' .config || { echo "::error::tailscale is missing from the package feed configuration"; exit 1; }
+          sh ../repo/scripts/check-feed-packages.sh config .config
+          sh ../repo/scripts/test-minidlna-config.sh "$PWD"
           grep -E '^CONFIG_VERSION_NUMBER|^# CONFIG_VERSION_FILENAMES' .config || true
           # A debug-* build only has to produce the image: nothing it builds
           # is published to the feed, and packages built as modules (=m) are
@@ -359,8 +360,7 @@ jobs:
       - name: Publish the feed
         if: "!startsWith(github.ref, 'refs/tags/debug-') && !inputs.warm"
         run: |
-          compgen -G "owrt/bin/packages/$ARCH/packages/tailscale-*.apk" >/dev/null || {
-            echo "::error::tailscale package was not built" >&2; exit 1; }
+          sh repo/scripts/check-feed-packages.sh packages owrt "$ARCH"
           ! grep -q '^tailscale ' "owrt/bin/targets/$TARGET/$DEVICE.manifest" || {
             echo "::error::tailscale must be installable from the feed, not included in the image" >&2; exit 1; }
           git clone --branch gh-pages --single-branch \
