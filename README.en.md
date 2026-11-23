@@ -37,7 +37,7 @@ My own board is an RC06, IPQ9554 rev 1.1, stock firmware 1.1.38, 1 GB of RAM.
 - Wi-Fi 2.4 and 5 GHz work as Wi-Fi 6, calibration from the ART partition is picked up, the TLMM6 and TLMM7 fix for 5 GHz is applied.
 - Wi-Fi 7 (EHT80) in access point mode works, tested with a laptop. macOS shows PHY Mode 802.11be, channel 36 at 80 MHz, iperf3 945 Mbit/s. Automatic channel selection on 5 GHz also works.
 - With country RU the QCN9274 radio firmware itself forbids 802.11be (NO-EHT shows up in `iw reg get`), and the access point runs as Wi-Fi 6. This is a decision of the radio firmware, not the driver. Since 1.4.0 the 5 GHz mode block warns about it, and a button next to it sets US for 5 GHz only.
-- The MLO mode comes up in a few seconds, the lower radio on channel 36 at 160 MHz, the upper one on 149 at 80 MHz. MLO is tested and works. A Wi-Fi 7 laptop joins such a network on one link, two links adding up on one device was not measured, there is no way to run such a test.
+- The MLO network starts in a few seconds, the lower radio on channel 36 at 160 MHz, the upper one on 149 at 80 MHz, network startup and a Wi-Fi 7 laptop connection on one link have been tested, simultaneous use of two links by one client has not been verified.
 - PPPoE on a live line, sysupgrade keeping settings and the list of enabled services, WireGuard and AmneziaWG (the module and the awg utility are built for this kernel).
 
 ## Known issues

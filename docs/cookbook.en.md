@@ -101,7 +101,7 @@ The mode is chosen in the "5 GHz mode" block at the top of Network, Wireless. Th
 
 - One radio. One network for the whole band, every channel, up to 160 MHz. The highest speed for a single device.
 - Two radios, like 5G-1 and 5G-2 on stock. The lower one runs on channels 36-64, the upper one from 149. The lower one can take 160 MHz in its settings, the upper one up to 80 MHz. Handy with many devices.
-- MLO. One Wi-Fi 7 network over both radios. Devices with Wi-Fi 7 and MLO keep a link on two channels at once, the rest join one of them like an ordinary network.
+- MLO. One Wi-Fi 7 network on both radios, a client connection on one link has been tested, simultaneous use of two links by one client has not been verified.
 
 In the two-radio and MLO modes each radio gets half of the antennas. So one device is slower than in one-radio mode. The numbers are in [benchmarks.en.md](benchmarks.en.md).
 

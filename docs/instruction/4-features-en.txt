@@ -21,7 +21,7 @@ One radio. One network for the whole band, up to 160 MHz. The highest speed for 
 
 Two radios, like 5G-1 and 5G-2 in the factory firmware. The lower one runs on channels 36-64 up to 160 MHz, the upper one from 149 up to 80 MHz. Each has its own clients.
 
-MLO. One Wi-Fi 7 network on both radios at once. Wi-Fi 7 devices keep a link on two channels, the rest join one of them like an ordinary network. Older devices get in too, the protection is WPA2 and WPA3.
+MLO. One Wi-Fi 7 network on both radios, a client connection on one link has been tested, simultaneous use of two links by one client has not been verified.
 
 In the two-radio and MLO modes each radio gets half of the antennas. So one device is slower than in one-radio mode.
 

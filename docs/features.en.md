@@ -34,7 +34,7 @@ The mode is chosen at the top of Network, Wireless. The router does not reboot, 
 
 - **One radio.** One network for the whole band up to 160 MHz. The highest speed for a single device.
 - **Two radios.** Like 5G-1 and 5G-2 in the factory firmware. The lower one runs on channels 36-64, the upper one from 149, each with its own clients. Handy with many devices.
-- **MLO.** One Wi-Fi 7 network on both radios at once, the lower one at 160 MHz. Wi-Fi 7 devices keep a link on two channels at the same time, the rest join like an ordinary network. Older devices get in too, the protection is WPA2 and WPA3.
+- **MLO.** One Wi-Fi 7 network on both radios, a client connection on one link has been tested, simultaneous use of two links by one client has not been verified.
 
 With country code RU the radio turns Wi-Fi 7 off without any warning, and the access point runs as Wi-Fi 6. Now the firmware says so, and a button next to it sets US for 5 GHz only.
 
